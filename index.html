@@ -3,9 +3,13 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0" />
-		<meta name="description" content="MCJS 1.8.8 - Web Minecraft" />
-		<title>MCJS 1.8.8</title>
+		<meta name="description" content="YastCraft 1.8.8 - 网页版 Minecraft | By yast" />
+		<meta name="author" content="Yast" />
+		<title>YastCraft1.8.8</title>
 		<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+		<!-- 本地化配置与注入器(在游戏代码加载前生效) -->
+		<script src="localization/config.js"></script>
+		<script src="localization/patcher.js"></script>
 		<style>
 			#loading {
 				position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -38,13 +42,22 @@
 				color: #e74c3c; margin-top: 12px; font-size: 13px;
 				max-width: 320px; text-align: center; line-height: 1.5;
 			}
+			#loading .footer {
+				position: absolute; bottom: 16px; font-size: 11px; color: #555;
+				text-align: center;
+			}
+			#loading .footer a { color: #4A90D9; text-decoration: none; }
 		</style>
 		<script type="text/javascript">
 			"use strict";
 
+			var L = window.MCJS_LOCALIZATION || {};
+			var LC = L.loading || {};
+			var LB = L.brand || {};
+
 			function fetchAndDecompress(url) {
 				return fetch(url).then(function(r) {
-					if (!r.ok) throw new Error("无法获取 " + url + "，HTTP状态码: " + r.status);
+					if (!r.ok) throw new Error("无法获取 " + url + ",HTTP状态码: " + r.status);
 					return r.arrayBuffer();
 				}).then(function(buf) {
 					var bytes = new Uint8Array(buf);
@@ -68,19 +81,26 @@
 				var assetsUrl = null;
 				try {
 					// 同时开始加载两个资源
-					setProgress(5, "正在加载游戏资源 ...");
+					setProgress(5, LC.loadAssets || "正在加载游戏资源 ...");
 					var classesPromise = fetchAndDecompress("classes.js.gz");
 					var assetsPromise = fetchAndDecompress("assets.epk.gz");
 
-					setProgress(30, "正在解压 classes.js ...");
+					setProgress(30, LC.decompressClasses || "正在解压游戏代码 ...");
 					var classesBuf = await classesPromise;
 
-					setProgress(50, "正在解压 assets.epk ...");
+					setProgress(50, LC.decompressAssets || "正在解压资源包 ...");
 					var assetsBuf = await assetsPromise;
 
-					setProgress(60, "正在执行游戏代码 ...");
+					setProgress(60, LC.executeCode || "正在执行游戏代码 ...");
+
+					// 将 ArrayBuffer 转为字符串,经本地化注入器替换后再执行
+					var classesText = new TextDecoder("utf-8").decode(classesBuf);
+					if (window.MCJS_Patcher && window.MCJS_Patcher.patchClassesSource) {
+						classesText = window.MCJS_Patcher.patchClassesSource(classesText);
+					}
+
 					// 创建 blob URL 并执行 classes.js
-					var blob = new Blob([classesBuf], { type: "text/javascript" });
+					var blob = new Blob([classesText], { type: "text/javascript" });
 					scriptUrl = URL.createObjectURL(blob);
 					var script = document.createElement("script");
 					script.src = scriptUrl;
@@ -99,12 +119,12 @@
 								URL.revokeObjectURL(scriptUrl);
 								scriptUrl = null;
 							}
-							reject(new Error("加载 classes.js 失败"));
+							reject(new Error("加载游戏代码失败"));
 						};
 						document.head.appendChild(script);
 					});
 
-					setProgress(80, "正在准备资源 ...");
+					setProgress(80, LC.prepareAssets || "正在准备资源 ...");
 
 					// 拦截 fetch 以从内存中提供 assets.epk
 					var assetsBlob = new Blob([assetsBuf]);
@@ -117,7 +137,7 @@
 						return origFetch(url, opts);
 					};
 
-					setProgress(90, "正在启动游戏 ...");
+					setProgress(90, LC.startGame || "正在启动游戏 ...");
 
 					// 隐藏加载界面
 					var loading = document.getElementById("loading");
@@ -130,8 +150,8 @@
 					}
 
 					// 配置并启动游戏
-					var relayId = 2;
-					window.eaglercraftXOpts = {
+					var relayId = 0;
+					window.yastCraftOpts = {
 						demoMode: false,
 						container: "game_frame",
 						assetsURI: "assets.epk",
@@ -147,21 +167,26 @@
 						enableMinceraft: false,
 						showBootMenuOnLaunch: false,
 						allowBootMenu: false,
-						relays: [
-							{ addr: "wss://relay.deev.is/", comment: "lax1dude relay #1", primary: relayId === 0 },
-							{ addr: "wss://relay.lax1dude.net/", comment: "lax1dude relay #2", primary: relayId === 1 },
-							{ addr: "wss://relay.shhnowisnottheti.me/", comment: "ayunami relay #1", primary: relayId === 2 }
-						]
+						relays: (L.relays || []).map(function(r, i) {
+							if (r.primary) relayId = i;
+							return { addr: r.addr, comment: r.comment, primary: !!r.primary };
+						})
 					};
 					var q = window.location.search;
 					if((typeof q === "string") && q[0] === "?" && (typeof window.URLSearchParams !== "undefined")) {
 						q = new window.URLSearchParams(q);
 						var s = q.get("server");
-						if(s) window.eaglercraftXOpts.joinServer = s;
+						if(s) window.yastCraftOpts.joinServer = s;
 					}
+
+					// 应用运行时 hook(在 main 之前)
+					if (window.MCJS_Patcher && window.MCJS_Patcher.applyRuntimeHooks) {
+						window.MCJS_Patcher.applyRuntimeHooks();
+					}
+
 					main();
 				} catch(e) {
-					setProgress(0, "加载失败: " + e.message);
+					setProgress(0, (LC.loadFailed || "加载失败: ") + e.message);
 					console.error(e);
 					// 清理已创建的 blob URL
 					if (scriptUrl) {
@@ -175,7 +200,7 @@
 
 			window.addEventListener("load", function() {
 				if(window.location.href.indexOf("file:") === 0) {
-					alert("Please deploy via HTTP server or GitHub Pages, do not open this file locally.");
+					alert(LC.localFileWarning || "请通过 HTTP 服务器或 GitHub Pages 部署,不要在本地直接打开此文件。");
 				} else {
 					bootGame();
 				}
@@ -184,10 +209,26 @@
 	</head>
 	<body style="margin:0px;width:100%;height:100%;overflow:hidden;background-color:black;" id="game_frame">
 		<div id="loading">
-			<div class="logo">MCJS</div>
-			<div class="version">1.8.8</div>
+			<div class="logo" id="loading-logo"></div>
+			<div class="version" id="loading-version"></div>
 			<div class="bar"><div class="fill" id="fill"></div></div>
 			<div class="text" id="load-text">正在初始化 ...</div>
+			<div class="footer" id="loading-footer"></div>
 		</div>
+		<script>
+			// 用配置填充加载界面显示内容(在 DOM 就绪后执行)
+			(function(){
+				var logoEl = document.getElementById("loading-logo");
+				var verEl = document.getElementById("loading-version");
+				var footerEl = document.getElementById("loading-footer");
+				var textEl = document.getElementById("load-text");
+				if (logoEl) logoEl.textContent = LB.name || "MCJS";
+				if (verEl) verEl.textContent = LC.versionText || (LB.version || "1.8.8");
+				if (textEl) textEl.textContent = LC.initText || "正在初始化 ...";
+				if (footerEl) {
+					footerEl.innerHTML = "由 <b>" + (LB.author || "Yast") + "</b> 制作 | <a href=\"" + (LB.websiteUrl || "#") + "\" target=\"_blank\">" + (LB.website || "") + "</a>";
+				}
+			})();
+		</script>
 	</body>
 </html>
