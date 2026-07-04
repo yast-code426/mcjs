@@ -53,6 +53,50 @@
         // ayunami relay 注释
         code = code.split("ayunami relay #1").join("中继服务器 #3");
 
+        // ===== 更多品牌和文字替换 =====
+
+        // 离线模板文件名 (只在字符串中出现)
+        code = code.split("Loading offline_template_eaglercraftX_1_8.html").join("正在加载 YastCraft 1.8 离线模板...");
+        code = code.split("Loading offline_template_eaglercraftX_1_8_fat_offline.html").join("正在加载 YastCraft 1.8 完整离线模板...");
+        code = code.split("Loading offline_template_eaglercraftX_1_8_fat_signed.html").join("正在加载 YastCraft 1.8 完整签名模板...");
+        code = code.split("Loading offline_template_eaglercraftX_1_8_signed.html").join("正在加载 YastCraft 1.8 签名模板...");
+        code = code.split("Loading offline_template_eaglercraft_1_5.html").join("正在加载 YastCraft 1.5 离线模板...");
+        code = code.split("Loading offline_template_eaglercraft_1_5_legacy.html").join("正在加载 YastCraft 1.5 旧版模板...");
+        code = code.split("Loading offline_template_eaglercraft_b1_3.html").join("正在加载 YastCraft Beta 1.3 模板...");
+
+        // 文件路径中的 eaglercraft 引用
+        code = code.split("offline_template_eaglercraftX_1_8.html").join("offline_template_YastCraft_1_8.html");
+        code = code.split("offline_template_eaglercraftX_1_8_fat_offline.html").join("offline_template_YastCraft_1_8_fat_offline.html");
+        code = code.split("offline_template_eaglercraftX_1_8_fat_signed.html").join("offline_template_YastCraft_1_8_fat_signed.html");
+        code = code.split("offline_template_eaglercraftX_1_8_signed.html").join("offline_template_YastCraft_1_8_signed.html");
+        code = code.split("offline_template_eaglercraft_1_5.html").join("offline_template_YastCraft_1_5.html");
+        code = code.split("offline_template_eaglercraft_1_5_legacy.html").join("offline_template_YastCraft_1_5_legacy.html");
+        code = code.split("offline_template_eaglercraft_b1_3.html").join("offline_template_YastCraft_b1_3.html");
+
+        // 文件头检测格式文本汉化
+        code = code.split("Detected format: EAGLERCRAFTX_1_8_SIGNED").join("检测到格式: YastCraftX 1.8 签名版");
+        code = code.split("Detected format: EAGLERCRAFTX_1_8_OFFLINE").join("检测到格式: YastCraftX 1.8 离线版");
+        code = code.split("Detected format: EAGLERCRAFTX_1_5_NEW_OFFLINE").join("检测到格式: YastCraftX 1.5 新版离线版");
+        code = code.split("Detected format: EAGLERCRAFTX_1_5_OLD_OFFLINE").join("检测到格式: YastCraftX 1.5 旧版离线版");
+        code = code.split("Detected format: EAGLERCRAFT_BETA_B1_3_OFFLINE").join("检测到格式: YastCraft Beta 1.3 离线版");
+        code = code.split("Detected format: EAGLERCRAFT_EPK_FILE").join("检测到格式: YastCraft EPK 文件");
+        code = code.split("Attempting to parse as: EAGLERCRAFTX_1_8_OFFLINE").join("正在尝试解析为: YastCraftX 1.8 离线版");
+        code = code.split("Attempting to parse as: EAGLERCRAFTX_1_8_SIGNED").join("正在尝试解析为: YastCraftX 1.8 签名版");
+        code = code.split("Attempting to parse as: EAGLERCRAFTX_1_8_FAT_OFFLINE").join("正在尝试解析为: YastCraftX 1.8 完整离线版");
+        code = code.split("Attempting to parse as: EAGLERCRAFTX_1_8_FAT_SIGNED").join("正在尝试解析为: YastCraftX 1.8 完整签名版");
+        code = code.split("Attempting to parse as: EAGLERCRAFTX_1_5_NEW_OFFLINE").join("正在尝试解析为: YastCraftX 1.5 新版离线版");
+        code = code.split("Attempting to parse as: EAGLERCRAFTX_1_5_OLD_OFFLINE").join("正在尝试解析为: YastCraftX 1.5 旧版离线版");
+        code = code.split("Attempting to parse as: EAGLERCRAFT_BETA_B1_3_OFFLINE").join("正在尝试解析为: YastCraft Beta 1.3 离线版");
+
+        // 导出文件名字符串汉化
+        code = code.split("YastCraft 1.8 离线版 .HTML").join("YastCraft 1.8 离线版.html");
+
+        // 全局变量名引用
+        code = code.split("window.eaglercraftXClientScriptURL").join("window.yastCraftXClientScriptURL");
+
+        // localStorage 命名空间值
+        code = code.split("\"_eaglercraftX\"").join("\"_yastcraft\"");
+
         return code;
     }
 

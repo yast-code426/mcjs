@@ -2678,10 +2678,140 @@ options.debugConsoleButton=调试控制台
 singleplayer.crashed.title=游戏崩溃
 singleplayer.crashed.continue=继续
 singleplayer.crashed.checkConsole=请查看控制台获取详细信息
-singleplayer.crashed.singleThreadCont=单线程崩溃
+singleplayer.crashed.singleThreadCont=继续
 
 # FNAW 皮肤
 options.skinCustomisation.enableFNAWSkins=启用高清皮肤
 
 # 其他选项
 profile.epk=资料备份
+
+# ===== yastcraft UI 翻译 =====
+
+# 局域网世界
+yastcraft.lan.scanning=正在扫描局域网游戏...
+yastcraft.lan.start=开启局域网世界
+yastcraft.lan.title=局域网世界
+
+# 屏幕录制
+yastcraft.screenrecorder.title=屏幕录制
+yastcraft.screenrecorder.start=开始录制
+yastcraft.screenrecorder.stop=停止录制
+yastcraft.screenrecorder.saving=正在保存录制...
+yastcraft.screenrecorder.saved=录制已保存
+yastcraft.screenrecorder.error=录制失败
+
+# 启动菜单
+yastcraft.bootmenu.title=启动菜单
+yastcraft.bootmenu.launch=启动游戏
+yastcraft.bootmenu.options=选项
+yastcraft.bootmenu.reload=重新加载
+yastcraft.bootmenu.reset=重置数据
+
+# 键盘设置
+yastcraft.keyboard.title=键盘设置
+yastcraft.keyboard.reset=重置键盘映射
+yastcraft.keyboard.conflict=按键冲突
+
+# 鼠标设置
+yastcraft.mouse.title=鼠标设置
+yastcraft.mouse.sensitivity=鼠标灵敏度
+yastcraft.mouse.invert=反转鼠标
+yastcraft.mouse.smooth=平滑鼠标移动
+
+# 语音设置
+yastcraft.voice.title=语音设置
+yastcraft.voice.connected=已连接
+yastcraft.voice.disconnected=未连接
+yastcraft.voice.connecting=正在连接...
+yastcraft.voice.error=语音连接失败
+
+# 音量设置
+yastcraft.volume.master=主音量
+yastcraft.volume.music=音乐音量
+yastcraft.volume.weather=天气音量
+yastcraft.volume.block=方块音量
+yastcraft.volume.hostile=敌对生物音量
+yastcraft.volume.neutral=友好生物音量
+yastcraft.volume.player=玩家音量
+yastcraft.volume.ambient=环境音量
+yastcraft.volume.voice=语音音量
+
+# 光影设置
+yastcraft.shaders.enable=启用光影
+yastcraft.shaders.disable=禁用光影
+yastcraft.shaders.reload=重新加载光影
+yastcraft.shaders.quality=光影质量
+yastcraft.shaders.quality.low=低
+yastcraft.shaders.quality.medium=中
+yastcraft.shaders.quality.high=高
+yastcraft.shaders.quality.extreme=极限
+yastcraft.shaders.shadow=阴影质量
+yastcraft.shaders.antialiasing=抗锯齿
+
+# 皮肤设置
+yastcraft.skin.title=皮肤设置
+yastcraft.skin.upload=上传皮肤
+yastcraft.skin.clear=清除皮肤
+yastcraft.skin.reset=重置为默认皮肤
+yastcraft.skin.model=皮肤模型
+yastcraft.skin.model.steve=Steve (窄臂)
+yastcraft.skin.model.alex=Alex (宽臂)
+
+# 披风设置
+yastcraft.cape.title=披风设置
+yastcraft.cape.upload=上传披风
+yastcraft.cape.clear=清除披风
+yastcraft.cape.reset=重置为默认披风
+
+# 文件导入导出
+yastcraft.files.import=导入文件
+yastcraft.files.export=导出文件
+yastcraft.files.import.success=文件导入成功
+yastcraft.files.import.failed=文件导入失败
+yastcraft.files.export.success=文件导出成功
+yastcraft.files.export.failed=文件导出失败
+
+# 关于 YastCraft
+yastcraft.about.title=关于 YastCraft
+yastcraft.about.version=版本
+yastcraft.about.author=作者
+yastcraft.about.website=项目主页
+yastcraft.about.license=开源协议
+
+# 检查更新
+yastcraft.update.title=检查更新
+yastcraft.update.checking=正在检查更新...
+yastcraft.update.available=有新版本可用
+yastcraft.update.latest=已是最新版本
+yastcraft.update.error=检查更新失败
+
+# 错误信息
+yastcraft.error.crash=游戏崩溃了
+yastcraft.error.crash.report=崩溃报告
+yastcraft.error.crash.reason=崩溃原因
+yastcraft.error.crash.copy=复制报告
+yastcraft.error.crash.copied=已复制
+yastcraft.error.outdated.client=客户端版本过旧
+yastcraft.error.outdated.server=服务器版本过旧
+yastcraft.error.incompatible=浏览器不兼容
+yastcraft.error.incompatible.detail=你的浏览器不支持运行此游戏所需的某些功能
+yastcraft.error.webgl.contextLost=WebGL 上下文丢失
+yastcraft.error.webgl.contextLost.detail=浏览器已强制释放游戏使用的 3D 渲染资源。请刷新页面重新开始游戏。
+yastcraft.error.webgl.notSupported=你的浏览器不支持 WebGL
+yastcraft.error.webgl.notSupported.detail=请尝试使用最新版 Google Chrome 或 Firefox 浏览器
+
+# 中继器 / 网络
+yastcraft.relay.connecting=正在连接中继服务器...
+yastcraft.relay.connected=已连接到中继服务器
+yastcraft.relay.disconnected=中继服务器连接已断开
+yastcraft.relay.error=中继服务器连接失败
+yastcraft.relay.select=选择中继服务器
+yastcraft.relay.latency=延迟
+yastcraft.relay.ping=正在测试延迟...
+
+# ===== 缺失的 YastCraft 翻译 =====
+singleplayer.failed.singleThreadWarning.1=工作线程问题已检测到
+singleplayer.failed.singleThreadWarning.2=集成服务器正在以单线程模式运行，这可能会导致性能问题。建议重新启动游戏。
+options.touchControlOpacity=触摸控制透明度
+

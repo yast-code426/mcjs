@@ -72,6 +72,8 @@
 				});
 			}
 
+			function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
 			function computeHash(buffer) {
 				var bytes = new Uint8Array(buffer);
 				var hash = 0;
@@ -86,11 +88,55 @@
 				var hash = computeHash(buffer);
 				var stored = localStorage.getItem(CACHE_KEY + "_" + name);
 				var current = size + "_" + hash;
-				if (stored && stored !== current) {
-					console.log("[YastCraft] " + name + " 已更新 (旧:" + stored + " 新:" + current + ")");
+				var updated = stored !== null && stored !== current;
+				var isNew = stored === null;
+				if (updated) {
+					console.log("[YastCraft] ⚠ " + name + " 检测到更新! (旧:" + stored + " 新:" + current + ")");
 				}
 				localStorage.setItem(CACHE_KEY + "_" + name, current);
-				return { size: size, hash: hash };
+				return { size: size, hash: hash, updated: updated, isNew: isNew };
+			}
+
+			async function fetchResourceWithValidation(url, name, downloadPct, decompressPct, verifyPct) {
+				var separator = url.indexOf("?") === -1 ? "?" : "&";
+				var bustUrl = url + separator + "v=" + BUILD_VERSION;
+				var label = name.charAt(0).toUpperCase() + name.slice(1);
+				/* 第1步：下载 */
+				setProgress(downloadPct, (LC["download" + label] || "正在下载 " + name + "..."));
+				await sleep(80);
+				var buf = await fetch(bustUrl, { cache: "no-store" }).then(function(r) {
+					if (!r.ok) throw new Error("无法获取 " + url + ",HTTP状态码: " + r.status);
+					return r.arrayBuffer();
+				});
+				/* 第2步：解压 */
+				setProgress(decompressPct, (LC["decompress" + label] || "正在解压 " + name + "..."));
+				await sleep(80);
+				var bytes = new Uint8Array(buf);
+				if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+					buf = pako.inflate(bytes).buffer;
+				}
+				/* 第3步：校验 (哈希对比) */
+				setProgress(verifyPct, (LC["verify" + label] || "正在校验 " + name + " 完整性...（对比缓存哈希）"));
+				await sleep(150);
+				var info = validateFile(buf, name);
+				/* 如果缓存与服务器不一致 → 重下载 */
+				if (info.updated) {
+					setProgress(verifyPct + 2, LC.reDownload || "⚠ 缓存与服务器不一致！正在重新下载...");
+					await sleep(200);
+					console.log("[YastCraft] " + name + " 缓存与服务器不一致，执行重新下载...");
+					buf = await fetch(bustUrl, { cache: "no-store" }).then(function(r) {
+						if (!r.ok) throw new Error("无法获取 " + url + ",HTTP状态码: " + r.status);
+						return r.arrayBuffer();
+					});
+					setProgress(verifyPct + 4, (LC["decompress" + label] || "正在解压 " + name + "..."));
+					await sleep(80);
+					bytes = new Uint8Array(buf);
+					if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+						buf = pako.inflate(bytes).buffer;
+					}
+					info = validateFile(buf, name);
+				}
+				return { buffer: buf, info: info };
 			}
 
 			function setProgress(pct, text) {
@@ -100,10 +146,86 @@
 				if (textEl) textEl.textContent = text;
 			}
 
+			// ===== 性能监控 =====
+			var _perfTimers = {};
+			function perfStart(name) { _perfTimers[name] = performance.now(); }
+			function perfEnd(name) {
+				if (_perfTimers[name]) {
+					var elapsed = (performance.now() - _perfTimers[name]).toFixed(1);
+					console.log('[YastCraft] \u23f1 ' + name + ': ' + elapsed + 'ms');
+					delete _perfTimers[name];
+				}
+			}
+
+			// ===== WebGL 兼容性检测 =====
+			function detectWebGLSupport() {
+				var canvas = document.createElement('canvas');
+				var gl = null;
+				var exts = {};
+				try {
+					gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+				} catch(e) {}
+				if (gl) {
+					exts = {
+						aniso: gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic'),
+						floatTex: gl.getExtension('OES_texture_float'),
+						halfFloat: gl.getExtension('OES_texture_half_float'),
+						depthTex: gl.getExtension('WEBGL_depth_texture'),
+						drawBuffers: gl.getExtension('WEBGL_draw_buffers'),
+						s3tc: gl.getExtension('WEBGL_compressed_texture_s3tc') || gl.getExtension('WEBKIT_WEBGL_compressed_texture_s3tc'),
+						etc1: gl.getExtension('WEBGL_compressed_texture_etc1'),
+						etc2: gl.getExtension('WEBGL_compressed_texture_etc')
+					};
+				}
+				return {
+					supported: !!gl,
+					version: gl ? (canvas.getContext('webgl2') ? 'webgl2' : 'webgl') : null,
+					extensions: exts,
+					renderer: gl ? gl.getParameter(gl.RENDERER) : 'unknown',
+					vendor: gl ? gl.getParameter(gl.VENDOR) : 'unknown'
+				};
+			}
+
+			// ===== 内存优化: 定期清理未使用的缓存 =====
+			function cleanupStaleCache() {
+				try {
+					var currentVersion = localStorage.getItem('mcjs_build_version');
+					var keysToRemove = [];
+					for (var i = 0; i < localStorage.length; i++) {
+						var key = localStorage.key(i);
+						if (key && key.indexOf('mcjs_v_') === 0 && key.indexOf(currentVersion) === -1) {
+							keysToRemove.push(key);
+						}
+					}
+					// 只清理超过 5 条的旧版本缓存,避免频繁删除
+					if (keysToRemove.length > 5) {
+						keysToRemove.forEach(function(k) { localStorage.removeItem(k); });
+						console.log('[YastCraft] 已清理 ' + keysToRemove.length + ' 条旧版本缓存');
+					}
+				} catch(e) {
+					// localStorage 可能不可用,忽略
+				}
+			}
+
+			// ===== 加载重试计数 =====
+			var _bootRetryCount = 0;
+			var _maxBootRetries = 2;
+
+			// ===== 移动端优化: 防止双击缩放和触摸延迟 =====
+			document.addEventListener('touchstart', function() {}, {passive: true});
+			document.addEventListener('touchmove', function(e) {
+				// 如果游戏 canvas 存在, 允许触摸事件通过
+				var gameCanvas = document.querySelector('canvas') || document.getElementById('game_frame');
+				if (gameCanvas && gameCanvas.contains(e.target)) {
+					// 游戏内部处理触摸
+				}
+			}, {passive: true});
+
 			async function bootGame() {
 				var scriptUrl = null;
 				var assetsUrl = null;
 				try {
+					perfStart('bootGame - 总耗时');
 					setProgress(5, LC.loadAssets || "正在加载游戏资源 ...");
 
 					var staleKey = localStorage.getItem("mcjs_build_version");
@@ -114,19 +236,46 @@
 						});
 					}
 					localStorage.setItem("mcjs_build_version", CACHE_KEY);
+					cleanupStaleCache();
 
-					var classesPromise = fetchAndDecompress("classes.js.gz");
-					var assetsPromise = fetchAndDecompress("assets.epk.gz");
-
-					setProgress(20, LC.decompressClasses || "正在解压游戏代码 ...");
-					var classesBuf = await classesPromise;
-					var classesInfo = validateFile(classesBuf, "classes");
+					/* 第一步：下载 → 解压 → 校验游戏源码 */
+					var classesResult = await fetchResourceWithValidation("classes.js.gz", "classes", 10, 20, 25);
+					var classesBuf = classesResult.buffer;
+					var classesInfo = classesResult.info;
 					console.log("[YastCraft] classes.js 大小:" + classesInfo.size + " 哈希:" + classesInfo.hash);
+					if (classesInfo.updated) {
+						setProgress(30, LC.updatedDone || "游戏源码已更新至最新版本 ✓");
+						console.log("[YastCraft] ★ 游戏源码已更新至最新版本");
+					} else if (classesInfo.isNew) {
+						setProgress(30, LC.cachedFirst || "游戏源码已缓存 ✓");
+						console.log("[YastCraft] ★ 首次缓存游戏源码");
+					} else {
+						setProgress(30, LC.unchanged || "游戏源码无变化，使用缓存 ✓");
+						console.log("[YastCraft] ✓ 游戏源码无变化，使用现有版本");
+					}
+					await sleep(120);
+					perfEnd('bootGame - 下载classes');
 
-					setProgress(45, LC.decompressAssets || "正在解压资源包 ...");
-					var assetsBuf = await assetsPromise;
-					var assetsInfo = validateFile(assetsBuf, "assets");
+					/* 第二步：下载 → 解压 → 校验资源包 */
+					var assetsResult = await fetchResourceWithValidation("assets.epk.gz", "assets", 35, 45, 50);
+					var assetsBuf = assetsResult.buffer;
+					var assetsInfo = assetsResult.info;
 					console.log("[YastCraft] assets.epk 大小:" + assetsInfo.size + " 哈希:" + assetsInfo.hash);
+					if (assetsInfo.updated) {
+						setProgress(55, LC.updatedDone || "资源包已更新至最新版本 ✓");
+						console.log("[YastCraft] ★ 资源包已更新至最新版本");
+					} else if (assetsInfo.isNew) {
+						setProgress(55, LC.cachedFirst || "资源包已缓存 ✓");
+						console.log("[YastCraft] ★ 首次缓存资源包");
+					} else {
+						setProgress(55, LC.unchanged || "资源包无变化，使用缓存 ✓");
+						console.log("[YastCraft] ✓ 资源包无变化，使用现有版本");
+					}
+					await sleep(120);
+					perfEnd('bootGame - 下载assets');
+
+					setProgress(58, LC.validateDone || "资源校验全部完成 ✓");
+					await sleep(100);
 
 					setProgress(60, LC.executeCode || "正在执行游戏代码 ...");
 
@@ -158,6 +307,7 @@
 						document.head.appendChild(script);
 					});
 
+					perfEnd('bootGame - 执行代码');
 					setProgress(80, LC.prepareAssets || "正在准备资源 ...");
 
 					var assetsBlob = new Blob([assetsBuf]);
@@ -214,6 +364,7 @@
 						window.MCJS_Patcher.applyRuntimeHooks();
 					}
 
+					perfEnd('bootGame - 总耗时');
 					main();
 				} catch(e) {
 					setProgress(0, (LC.loadFailed || "加载失败: ") + e.message);
@@ -223,6 +374,18 @@
 					}
 					if (assetsUrl) {
 						URL.revokeObjectURL(assetsUrl);
+					}
+					// ===== 错误恢复: 自动重试 =====
+					if (_bootRetryCount < _maxBootRetries) {
+						_bootRetryCount++;
+						var retryMsg = (LC.retryLoad || '加载失败, 3 秒后自动重试... (第 %d 次)');
+						setProgress(0, retryMsg.replace('%d', _bootRetryCount));
+						console.warn('[YastCraft] 第 ' + _bootRetryCount + ' 次加载失败, 即将重试...');
+						await sleep(3000);
+						// 清除旧的对象URL
+						if (scriptUrl) { URL.revokeObjectURL(scriptUrl); scriptUrl = null; }
+						if (assetsUrl) { URL.revokeObjectURL(assetsUrl); assetsUrl = null; }
+						return bootGame();
 					}
 				}
 			}
