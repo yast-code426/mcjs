@@ -54,19 +54,43 @@
 			var L = window.MCJS_LOCALIZATION || {};
 			var LC = L.loading || {};
 			var LB = L.brand || {};
+			var BUILD_VERSION = L.buildVersion || "unknown";
+			var CACHE_KEY = "mcjs_v_" + BUILD_VERSION;
 
 			function fetchAndDecompress(url) {
-				return fetch(url).then(function(r) {
+				var separator = url.indexOf("?") === -1 ? "?" : "&";
+				var bustUrl = url + separator + "v=" + BUILD_VERSION;
+				return fetch(bustUrl, { cache: "no-store" }).then(function(r) {
 					if (!r.ok) throw new Error("无法获取 " + url + ",HTTP状态码: " + r.status);
 					return r.arrayBuffer();
 				}).then(function(buf) {
 					var bytes = new Uint8Array(buf);
-					// 检查是否为 gzip 格式 (以 0x1f 0x8b 开头)
 					if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
 						return pako.inflate(bytes).buffer;
 					}
 					return buf;
 				});
+			}
+
+			function computeHash(buffer) {
+				var bytes = new Uint8Array(buffer);
+				var hash = 0;
+				for (var i = 0; i < bytes.length; i += 512) {
+					hash = ((hash << 5) - hash + bytes[i]) | 0;
+				}
+				return (hash >>> 0).toString(16);
+			}
+
+			function validateFile(buffer, name) {
+				var size = buffer.byteLength;
+				var hash = computeHash(buffer);
+				var stored = localStorage.getItem(CACHE_KEY + "_" + name);
+				var current = size + "_" + hash;
+				if (stored && stored !== current) {
+					console.log("[YastCraft] " + name + " 已更新 (旧:" + stored + " 新:" + current + ")");
+				}
+				localStorage.setItem(CACHE_KEY + "_" + name, current);
+				return { size: size, hash: hash };
 			}
 
 			function setProgress(pct, text) {
@@ -80,32 +104,42 @@
 				var scriptUrl = null;
 				var assetsUrl = null;
 				try {
-					// 同时开始加载两个资源
 					setProgress(5, LC.loadAssets || "正在加载游戏资源 ...");
+
+					var staleKey = localStorage.getItem("mcjs_build_version");
+					if (staleKey && staleKey !== CACHE_KEY) {
+						console.log("[YastCraft] 检测到版本更新 (" + staleKey + " -> " + CACHE_KEY + "), 清除旧缓存");
+						Object.keys(localStorage).forEach(function(k) {
+							if (k.indexOf("mcjs_v_") === 0) localStorage.removeItem(k);
+						});
+					}
+					localStorage.setItem("mcjs_build_version", CACHE_KEY);
+
 					var classesPromise = fetchAndDecompress("classes.js.gz");
 					var assetsPromise = fetchAndDecompress("assets.epk.gz");
 
-					setProgress(30, LC.decompressClasses || "正在解压游戏代码 ...");
+					setProgress(20, LC.decompressClasses || "正在解压游戏代码 ...");
 					var classesBuf = await classesPromise;
+					var classesInfo = validateFile(classesBuf, "classes");
+					console.log("[YastCraft] classes.js 大小:" + classesInfo.size + " 哈希:" + classesInfo.hash);
 
-					setProgress(50, LC.decompressAssets || "正在解压资源包 ...");
+					setProgress(45, LC.decompressAssets || "正在解压资源包 ...");
 					var assetsBuf = await assetsPromise;
+					var assetsInfo = validateFile(assetsBuf, "assets");
+					console.log("[YastCraft] assets.epk 大小:" + assetsInfo.size + " 哈希:" + assetsInfo.hash);
 
 					setProgress(60, LC.executeCode || "正在执行游戏代码 ...");
 
-					// 将 ArrayBuffer 转为字符串,经本地化注入器替换后再执行
 					var classesText = new TextDecoder("utf-8").decode(classesBuf);
 					if (window.MCJS_Patcher && window.MCJS_Patcher.patchClassesSource) {
 						classesText = window.MCJS_Patcher.patchClassesSource(classesText);
 					}
 
-					// 创建 blob URL 并执行 classes.js
 					var blob = new Blob([classesText], { type: "text/javascript" });
 					scriptUrl = URL.createObjectURL(blob);
 					var script = document.createElement("script");
 					script.src = scriptUrl;
 
-					// 等待脚本加载和执行
 					await new Promise(function(resolve, reject) {
 						script.onload = function() {
 							if (scriptUrl) {
@@ -126,7 +160,6 @@
 
 					setProgress(80, LC.prepareAssets || "正在准备资源 ...");
 
-					// 拦截 fetch 以从内存中提供 assets.epk
 					var assetsBlob = new Blob([assetsBuf]);
 					assetsUrl = URL.createObjectURL(assetsBlob);
 					var origFetch = window.fetch;
@@ -139,7 +172,6 @@
 
 					setProgress(90, LC.startGame || "正在启动游戏 ...");
 
-					// 隐藏加载界面
 					var loading = document.getElementById("loading");
 					if (loading) {
 						loading.style.opacity = "0";
@@ -149,7 +181,6 @@
 						}, 500);
 					}
 
-					// 配置并启动游戏
 					var relayId = 0;
 					window.yastCraftOpts = {
 						demoMode: false,
@@ -179,7 +210,6 @@
 						if(s) window.yastCraftOpts.joinServer = s;
 					}
 
-					// 应用运行时 hook(在 main 之前)
 					if (window.MCJS_Patcher && window.MCJS_Patcher.applyRuntimeHooks) {
 						window.MCJS_Patcher.applyRuntimeHooks();
 					}
@@ -188,7 +218,6 @@
 				} catch(e) {
 					setProgress(0, (LC.loadFailed || "加载失败: ") + e.message);
 					console.error(e);
-					// 清理已创建的 blob URL
 					if (scriptUrl) {
 						URL.revokeObjectURL(scriptUrl);
 					}
@@ -216,7 +245,6 @@
 			<div class="footer" id="loading-footer"></div>
 		</div>
 		<script>
-			// 用配置填充加载界面显示内容(在 DOM 就绪后执行)
 			(function(){
 				var logoEl = document.getElementById("loading-logo");
 				var verEl = document.getElementById("loading-version");

@@ -9,6 +9,9 @@
  */
 
 window.MCJS_LOCALIZATION = {
+    // ===== 构建版本(用于缓存校验,每次更新资源文件时递增) =====
+    buildVersion: "20260704a",
+
     // ===== 品牌信息 =====
     brand: {
         name: "YastCraft",
