@@ -1,0 +1,7 @@
+# GitHub Pages config
+permalink: pretty
+exclude:
+  - download.sh
+  - versions/
+  - README.md
+  - .gitignore

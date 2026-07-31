@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>MCJS 镜像站 - 网页版MC启动器</title>
+  <meta name="description" content="MCJS 镜像站 - Eaglercraft 全版本网页版MC启动器">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+</head>
+<body>
+  <div id="app">
+    <!-- 头部 -->
+    <header class="header">
+      <div class="header-inner">
+        <div class="logo">
+          <div class="logo-icon">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <rect x="2" y="2" width="28" height="28" rx="4" fill="#4CAF50"/>
+              <rect x="8" y="8" width="6" height="6" fill="#fff" opacity="0.9"/>
+              <rect x="18" y="8" width="6" height="6" fill="#fff" opacity="0.9"/>
+              <rect x="8" y="18" width="16" height="6" fill="#fff" opacity="0.9"/>
+            </svg>
+          </div>
+          <div class="logo-text">
+            <h1>MCJS 镜像站</h1>
+            <span class="subtitle">Eaglercraft 全版本启动器</span>
+          </div>
+        </div>
+        <div class="header-stats">
+          <span class="stat-badge" id="versionCount">16 个版本</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主体 -->
+    <main class="main">
+      <!-- 🔥 公告 -->
+      <div class="announcement">
+        <div class="announcement-header">🔥 2026 年 8 月更新</div>
+        <ul class="announcement-list">
+          <li><span class="highlight">主站已在大部分地区恢复正常访问</span>，但不保证能存活多久。为防止又被拦截，恢复主站的同时加入更多镜像站。如果你连此 MCJS.CC 网站主页都无法访问，请访问 MCJS 的唯一官方镜像站 <a href="https://mcjs.link" target="_blank">MCJS.Link</a>。建议不要从任何搜索引擎搜索 MCJS，而是直接在浏览器地址栏输入 <span class="highlight">MCJS.CC</span> 或 <span class="highlight">MCJS.Link</span>（本站的网址简短好记请不要记错了），谨防搜索引擎给出的假冒网站结果。</li>
+          <li><span class="highlight">1.8.8 版本更新远程联机功能</span>，"共享世界"现在支持在不同的网络下远程联机，不再局限于局域网和 P2P 环境，共享世界邀请码对全网所有用户生效，可轻松跨网连接。</li>
+          <li><span class="highlight">1.16.5，1.21.11，26.1.2 等新版本的最新测试版发布</span></li>
+          <li><span class="highlight">旧版本客户端重新上线</span></li>
+        </ul>
+      </div>
+
+      <!-- 筛选栏 -->
+      <div class="filter-bar">
+        <div class="filter-tabs">
+          <button class="filter-tab active" data-filter="all">全部</button>
+          <button class="filter-tab" data-filter="recommended">推荐</button>
+          <button class="filter-tab" data-filter="stable">稳定版</button>
+          <button class="filter-tab" data-filter="beta">测试版</button>
+          <button class="filter-tab" data-filter="new-beta">新版测试</button>
+          <button class="filter-tab" data-filter="legacy">经典版</button>
+          <button class="filter-tab" data-filter="wasm">WASM</button>
+        </div>
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="搜索版本...">
+        </div>
+      </div>
+
+      <!-- 版本网格 -->
+      <div class="version-grid" id="versionGrid">
+        <!-- 由 JS 渲染 -->
+      </div>
+
+      <!-- ===== FAQ 常见问题 ===== -->
+      <section class="faq-section">
+        <h2>❓ 常见问题解答</h2>
+
+        <div class="faq-item">
+          <div class="q">旧网站 mc.js.cool 还能用吗？</div>
+          <div class="a">mc.js.cool 是本站很久以前的旧网站，现已停止运营，已完全迁移至 <span class="highlight">mcjs.cc</span>。请将旧网站从收藏夹移除，更换为本站 mcjs.cc。<br>如果本站主页在部分地区被拦截，请使用唯一官方镜像站 <a href="https://mcjs.link" target="_blank">MCJS.Link</a>。<br><span class="warn">MCJS 有且只有两个官方域名：mcjs.cc 和 mcjs.link</span>，请直接在地址栏输入，谨防搜索引擎的假冒网站。</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="q">游戏主站 play.mcjs.cc 无法访问怎么办？</div>
+          <div class="a">由于部分用户滥用服务及恶意举报，play.mcjs.cc 被运营商 DNS 劫持。<br><span class="highlight">声明：本网站是纯静态 HTML 网站，不会收集或上传任何用户信息，更不是诈骗网站！</span><br>临时解决方法：使用本镜像站提供的备用线路（点击"启动"后选择其他镜像），或使用网络代理访问主线路。</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="q">游戏存档会消失吗？</div>
+          <div class="a">MCJS 适合临时设备快速体验 MC，受浏览器缓存限制，存档可能随时被自动删除。<br><span class="highlight">建议：</span>长期游玩请定期备份存档，或导出至正版客户端使用。</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="q">游戏打不开 / 卡死 / 崩溃怎么办？</div>
+          <div class="a">请使用最新版 <span class="highlight">Google Chrome</span> 浏览器访问，尽量避免使用其他浏览器。<br>推荐使用 WASM 版本（性能最佳）。设备建议使用性能较好的电脑，而非手机等移动设备。</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="q">多人游戏怎么联机？</div>
+          <div class="a">MCJS 支持三种联机方式：<br>
+            • <span class="highlight">单机</span>：单人游玩，无需网络。<br>
+            • <span class="highlight">局域网联机</span>：同一网络下，房主开启"共享世界"，其他设备在"多人游戏"中自动发现房间。<br>
+            • <span class="highlight">远程联机（P2P + TURN 中转）</span>：房主开启"共享世界"生成邀请码，其他设备输入邀请码直连。支持跨网络远程联机，数据通过 WSS 协议加密传输。<br>
+            <span class="warn">禁止滥用联机服务，一经发现永久拉黑来源 IP！</span>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="q">手机 / 平板能玩吗？</div>
+          <div class="a"><span class="highlight">有且只有 MCJS 官方 1.8.8 版本</span> 能在移动触屏设备上运行并适配触屏操作。<br>其他版本仅支持电脑端，推荐使用电脑浏览器体验。</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="q">新版本（1.16.5 / 1.21.11 / 26.1.2）稳定吗？</div>
+          <div class="a">这些是 <span class="warn">非常早期的测试版</span>，不稳定且 bug 多，仅用于尝鲜体验。<br>高版本对设备性能要求极高，<span class="warn">只有 WASM 版本</span>，需要高性能电脑才能流畅运行，否则浏览器容易崩溃。<br>如有 bug 请勿反馈，等正式版发布后再提交。</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="q">如何反馈问题或提出建议？</div>
+          <div class="a">MCJS 目前 <span class="highlight">有且只有 GitHub 官方支持平台</span>，其他平台均为假冒。<br>请前往 <a href="https://github.com/mcjsteam/mc.js/issues" target="_blank">MCJS 官方 GitHub Issues</a> 提交反馈。<br><span class="warn">请先阅读常见问题，查看往期 issues，再提问！重复提问常见问题将被禁止再次提问。</span></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+      <p>MCJS 镜像站是一个基于 Eaglercraft 网页版 MC 的社区启动器。</p>
+      <p>游戏文件来自公共 CDN 镜像。与 Minecraft、Mojang 或 MCJS 无从属关系。</p>
+    </footer>
+  </div>
+
+  <!-- 启动弹窗 -->
+  <div class="modal-overlay" id="launchModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle">加载中...</h2>
+        <button class="modal-close" id="modalClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="loading-screen" id="loadingScreen">
+          <div class="spinner"></div>
+          <p class="loading-text" id="loadingText">正在准备游戏文件...</p>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <p class="loading-detail" id="loadingDetail"></p>
+        </div>
+        <div class="mirror-select" id="mirrorSelect">
+          <p>选择镜像线路启动：</p>
+          <div class="mirror-list" id="mirrorList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/versions.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
