@@ -68,10 +68,22 @@ body {
 }
 
 .bg-image {
-  /* 直接在根目录下找 assets 文件夹 */
-  background: url('/assets/bg.jpg') center/cover no-repeat;
-  opacity: 0.04;
+  /* Use relative path so it works in any deployment subdirectory.
+     The original code used an absolute /assets/bg.jpg path which
+     404'd on sub-path deployments (e.g. https://host/mcjs/). */
+  background: url('../assets/bg.jpg') center/cover no-repeat;
+  opacity: 0.22;
   transition: opacity 0.5s;
+  /* Pre-warm the image and gracefully fall back if it 404s. */
+  background-color: transparent;
+}
+
+.bg-image-fallback {
+  /* Used if assets/bg.jpg is missing - a CSS-only gradient that
+     still matches the "Minecraft landscape" vibe. */
+  background:
+    linear-gradient(180deg, #87ceeb 0%, #b4d8e7 30%, #8bc78b 60%, #4a7a3a 100%);
+  opacity: 0.08;
 }
 
 body.no-bg .bg-image {
@@ -256,6 +268,10 @@ body.no-bg .bg-image {
   color: var(--accent-green);
   font-weight: 600;
 }
+
+/* Hero stats row (added 2026-08-01) */
+/* hero-stats removed - the 3 stat cards (stable/online/modpack)
+   were visually noisy and the user requested a simpler hero layout. */
 
 /* ========== Main ========== */
 .main {
@@ -463,6 +479,18 @@ body.no-bg .bg-image {
 .engine-tag {
   color: var(--accent-orange);
   font-weight: 600;
+}
+.tag-online {
+  color: var(--accent-blue);
+  font-weight: 600;
+  background: rgba(59, 143, 194, 0.08);
+  border-color: rgba(59, 143, 194, 0.12);
+}
+.tag-modpack {
+  color: var(--accent-purple);
+  font-weight: 600;
+  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(139, 92, 246, 0.12);
 }
 
 .card-footer {
@@ -1187,4 +1215,195 @@ body.no-bg .bg-image {
   .hero-title {
     font-size: 1.5rem;
   }
+  /* hero-stats removed */
+}
+
+/* ========== Dark Mode ========== */
+body.dark {
+  --bg-page: #0e0f14;
+  --bg-base: #15171f;
+  --bg-card: rgba(30, 32, 44, 0.6);
+  --bg-card-hover: rgba(40, 43, 58, 0.9);
+  --glass-bg: rgba(30, 32, 44, 0.65);
+  --glass-bg-heavy: rgba(20, 22, 30, 0.95);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-border-hover: rgba(255, 255, 255, 0.12);
+  --text-primary: #e8e8f0;
+  --text-secondary: #a8aac0;
+  --text-muted: #6e7088;
+  --accent-green: #4ad294;
+  --accent-green-glow: rgba(74, 210, 148, 0.2);
+  --accent-blue: #5cb0e8;
+  --accent-orange: #f0a850;
+  --accent-purple: #a78bfa;
+  --accent-red: #f06a6a;
+  color-scheme: dark;
+}
+body.dark .bg-image {
+  /* Dark mode: keep background a little more prominent so the
+     Minecraft landscape is still visible on the dark UI. */
+  opacity: 0.28;
+}
+body.dark .bg-overlay {
+  background:
+    radial-gradient(ellipse at 30% 0%, rgba(74, 210, 148, 0.05) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 100%, rgba(92, 176, 232, 0.04) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(14, 15, 20, 0.2) 0%, rgba(14, 15, 20, 0.85) 100%);
+}
+body.dark .bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+}
+body.dark .modal,
+body.dark .settings-panel,
+body.dark .header,
+body.dark .game-toolbar {
+  background: rgba(20, 22, 30, 0.92);
+  color: var(--text-primary);
+}
+body.dark .setting-select,
+body.dark .search-box input,
+body.dark .card-detail {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+body.dark .auto-launch-btn,
+body.dark .mirror-item,
+body.dark .cache-info,
+body.dark .card-detail {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+body.dark .toolbar-btn,
+body.dark .modal-close,
+body.dark .settings-close {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+body.dark .toolbar-btn:hover,
+body.dark .modal-close:hover,
+body.dark .settings-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+body.dark .toggle {
+  background: rgba(255, 255, 255, 0.12);
+}
+body.dark .game-container {
+  background: #0a0b10;
+}
+body.dark .launch-content {
+  background: rgba(20, 22, 30, 0.92);
+}
+body.dark .launch-spinner {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+body.dark .card-meta,
+body.dark .card-size,
+body.dark .mirror-item-url,
+body.dark .settings-group-title,
+body.dark .setting-label small,
+body.dark .faq-item .a,
+body.dark .footer {
+  color: var(--text-muted);
+}
+
+/* ========== Reduced motion ========== */
+body.no-anim *,
+body.no-anim *::before,
+body.no-anim *::after {
+  animation-duration: 0.001s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.05s !important;
+}
+
+/* ========== WASM Warning Banner ========== */
+.wasm-warning {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  max-width: 600px;
+  width: calc(100% - 32px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(255, 220, 120, 0.95);
+  border: 1px solid rgba(220, 180, 60, 0.4);
+  color: #5a4010;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(220, 180, 60, 0.18);
+  font-size: 0.85rem;
+  font-weight: 500;
+  animation: wasmSlideDown 0.3s ease-out;
+}
+body.dark .wasm-warning {
+  background: rgba(60, 50, 20, 0.95);
+  border-color: rgba(220, 180, 60, 0.3);
+  color: #f0d890;
+}
+.wasm-warning-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.wasm-warning-content strong {
+  font-weight: 700;
+}
+.wasm-warning-content span {
+  flex: 1;
+  line-height: 1.4;
+}
+.wasm-warning-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.wasm-warning-close:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.08);
+}
+@keyframes wasmSlideDown {
+  from { transform: translate(-50%, -20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* ========== Empty State Improvements ========== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.empty-state p {
+  font-size: 0.9rem;
+  margin: 2px 0;
+}
+
+/* ========== Settings close fix: avoid double action button look ========== */
+.action-btn[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ========== Performance: better paint containment ========== */
+.version-card {
+  contain: layout style paint;
+}
+.modal, .settings-panel, .game-toolbar {
+  contain: layout style;
 }

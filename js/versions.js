@@ -230,7 +230,9 @@ const VERSIONS = [
     external: true
   },
 
-  // === 模组整合包 Eaglercraft 客户端 ===
+  // === 模组整合包 Eaglercraft 客户端 (来源: mcjs.cc 2026-08-01 官方页面) ===
+  // Forge 整合包官方文件大小: Lite 25.7MB / Tech 28.3MB / Skyfactory 26.5MB / Magic 30.3MB
+  // 注意: 这些版本只支持英文,切换语言会导致游戏崩溃
   {
     id: '1.6.4-forge-lite',
     name: 'Eaglercraft 1.6.4 Forge "Lite" 轻量整合包',
@@ -238,7 +240,7 @@ const VERSIONS = [
     author: 'lax1dude',
     type: 'beta',
     engine: 'WASM',
-    size: '未知',
+    size: '25.7MB',
     lang: ['English'],
     features: ['远程联机', '局域网', '模组支持'],
     multiplayer: true,
@@ -252,9 +254,12 @@ const VERSIONS = [
             '📂 资源：自定义材质包、内置模组包',
     path: '1.6.4lite',
     mirrors: [
+      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4lite/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4lite/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4lite/' },
       { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4lite/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4lite/' }
+      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.6.4lite/' },
+      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.6.4lite/' }
     ],
     external: true
   },
@@ -265,7 +270,7 @@ const VERSIONS = [
     author: 'lax1dude',
     type: 'beta',
     engine: 'WASM',
-    size: '未知',
+    size: '28.3MB',
     lang: ['English'],
     features: ['远程联机', '局域网', '模组支持'],
     multiplayer: true,
@@ -280,9 +285,12 @@ const VERSIONS = [
             '📂 资源：自定义材质包、内置模组包',
     path: '1.6.4tech',
     mirrors: [
+      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4tech/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4tech/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4tech/' },
       { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4tech/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4tech/' }
+      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.6.4tech/' },
+      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.6.4tech/' }
     ],
     external: true
   },
@@ -293,7 +301,7 @@ const VERSIONS = [
     author: 'lax1dude',
     type: 'beta',
     engine: 'WASM',
-    size: '未知',
+    size: '26.5MB',
     lang: ['English'],
     features: ['远程联机', '局域网', '模组支持'],
     multiplayer: true,
@@ -308,9 +316,12 @@ const VERSIONS = [
             '📂 资源：自定义材质包、内置模组包',
     path: '1.6.4skyfactory',
     mirrors: [
+      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4skyfactory/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4skyfactory/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4skyfactory/' },
       { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4skyfactory/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4skyfactory/' }
+      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.6.4skyfactory/' },
+      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.6.4skyfactory/' }
     ],
     external: true
   },
@@ -321,7 +332,7 @@ const VERSIONS = [
     author: 'lax1dude',
     type: 'beta',
     engine: 'WASM',
-    size: '未知',
+    size: '30.3MB',
     lang: ['English'],
     features: ['远程联机', '局域网', '模组支持'],
     multiplayer: true,
@@ -336,9 +347,12 @@ const VERSIONS = [
             '📂 资源：自定义材质包、内置模组包',
     path: '1.6.4magic',
     mirrors: [
+      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4magic/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4magic/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4magic/' },
       { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4magic/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4magic/' }
+      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.6.4magic/' },
+      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.6.4magic/' }
     ],
     external: true
   },

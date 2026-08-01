@@ -11,9 +11,25 @@
 </head>
 <body>
   <!-- Background layers -->
-<div class="bg-layer bg-image" style="background: url('assets/bg.jpg') center/cover no-repeat;"></div>
+  <div class="bg-layer bg-image"></div>
   <div class="bg-layer bg-overlay"></div>
   <div class="bg-layer bg-grid"></div>
+
+  <!-- Compatibility notice for non-WASM browsers -->
+  <div id="wasmWarning" class="wasm-warning" style="display:none" role="alert">
+    <div class="wasm-warning-content">
+      <strong>提示</strong>
+      <span id="wasmWarningText">检测到您的浏览器可能不完全支持 WebAssembly。已为您自动回退到 JS 版本。</span>
+      <button class="wasm-warning-close" id="wasmWarningClose" aria-label="关闭">&times;</button>
+    </div>
+  </div>
+
+  <!-- No-script fallback -->
+  <noscript>
+    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:#fff;font-family:sans-serif;padding:20px;text-align:center;z-index:9999;">
+      请启用 JavaScript 以使用 MCJS Launcher。
+    </div>
+  </noscript>
 
   <div id="app">
     <!-- Header -->
@@ -34,8 +50,8 @@
           </div>
         </div>
         <div class="header-actions">
-          <span class="stat-badge" id="versionCount">18 个版本</span>
-          <button class="settings-btn" id="settingsBtn" title="设置 (Ctrl+,)">&#9881;</button>
+          <span class="stat-badge" id="versionCount">18 个真实版本</span>
+          <button class="settings-btn" id="settingsBtn" title="设置 (Ctrl+,)" aria-label="设置">&#9881;</button>
         </div>
       </div>
     </header>
@@ -44,7 +60,7 @@
     <section class="hero">
       <h2 class="hero-title">Minecraft, In Your Browser.</h2>
       <p class="hero-subtitle">
-        本地运行 <span class="hl">18 个版本</span> 的 Eaglercraft 网页版 Minecraft<br>
+        本地运行 <span class="hl" id="heroVersionCount">18</span> 个真实可用的 Eaglercraft 网页版 Minecraft<br>
         无需跳转，游戏直接在页面内启动
       </p>
     </section>
@@ -114,10 +130,30 @@
     <div class="modal">
       <div class="modal-header">
         <h2 id="modalTitle">选择启动方式</h2>
-        <button class="modal-close" id="modalClose">&times;</button>
+        <button class="modal-close" id="modalClose" aria-label="关闭">&times;</button>
       </div>
       <div class="modal-body">
         <div id="mirrorList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Launch Failed Dialog (shown when all mirrors fail) -->
+  <div class="modal-overlay" id="launchFailedModal">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <h2>无法启动游戏</h2>
+        <button class="modal-close" id="launchFailedClose" aria-label="关闭">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="launchFailedMsg" style="margin-bottom:12px;font-size:0.88rem;color:var(--text-secondary);line-height:1.6;"></p>
+        <p style="margin-bottom:8px;font-size:0.8rem;color:var(--text-muted);">您可以手动访问以下链接:</p>
+        <input type="text" id="launchFailedUrl" readonly style="width:100%;padding:8px 12px;border:1px solid var(--glass-border);border-radius:8px;font-family:var(--font-mono);font-size:0.78rem;background:var(--bg-card);">
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="card-launch-btn" id="launchFailedCopy" style="flex:1;">复制链接</button>
+          <button class="card-launch-btn" id="launchFailedOpen" style="flex:1;background:var(--accent-blue);box-shadow:0 2px 8px rgba(59,143,194,0.25);">在新标签页打开</button>
+        </div>
+        <button class="action-btn" id="launchFailedRetry" style="margin-top:14px;">重试 (回到镜像选择)</button>
       </div>
     </div>
   </div>
@@ -155,7 +191,7 @@
               <small>启动游戏后自动进入全屏</small>
             </div>
             <div class="setting-control">
-              <button class="toggle" id="settingFullscreen" type="button"></button>
+              <button class="toggle" id="settingFullscreen" type="button" role="switch" aria-checked="false"></button>
             </div>
           </div>
         </div>
@@ -208,7 +244,7 @@
               <small>每个版本使用独立存档空间</small>
             </div>
             <div class="setting-control">
-              <button class="toggle active" id="settingSaveIsolation" type="button"></button>
+              <button class="toggle active" id="settingSaveIsolation" type="button" role="switch" aria-checked="true"></button>
             </div>
           </div>
           <div class="setting-item">
@@ -240,7 +276,7 @@
               <small>显示 Minecraft 风景背景</small>
             </div>
             <div class="setting-control">
-              <button class="toggle active" id="settingBgImage" type="button"></button>
+              <button class="toggle active" id="settingBgImage" type="button" role="switch" aria-checked="true"></button>
             </div>
           </div>
           <div class="setting-item">
@@ -249,7 +285,7 @@
               <small>启动器界面音效</small>
             </div>
             <div class="setting-control">
-              <button class="toggle active" id="settingSound" type="button"></button>
+              <button class="toggle active" id="settingSound" type="button" role="switch" aria-checked="true"></button>
             </div>
           </div>
         </div>
@@ -275,8 +311,8 @@
         </button>
       </div>
     </div>
-    <div class="game-container" id="gameContainer" id="gameOverlay">
-      <div class="launch-content">
+    <div class="game-container" id="gameContainer">
+      <div class="launch-content" id="launchContent">
         <div class="launch-spinner"></div>
         <p class="launch-text" id="launchText">正在准备启动...</p>
         <div class="launch-progress-bar">

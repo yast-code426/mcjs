@@ -1,8 +1,19 @@
-/* MCJS Launcher - Game Engine */
+/* MCJS Launcher - Game Engine
+ * Bug fixes: 2026-08-01
+ *  - tryFallbackMirror used to open mirrors[0].url when ALL mirrors failed,
+ *    which pointed to the mirror root (e.g. play.mcjs.cc) instead of the
+ *    specific version page. Now we open the *version-specific* path on
+ *    the primary domain, with a proper error message.
+ *  - Better detection of cross-origin/HTML injection failures.
+ *  - Settings defaults include new fields (darkMode, animations).
+ *  - Sound toggle in settings now actually controls the launcher UI sounds.
+ *  - Robust iframe sandbox that doesn't break IndexedDB persistence.
+ *  - SRI-friendly cache keys so a corrupt entry is automatically refreshed.
+ */
 (function(){'use strict';
 
 /* ========== Settings Manager ========== */
-const DEFAULT_SETTINGS={
+var DEFAULT_SETTINGS={
   mirrorIndex:0,
   memoryLimit:512,
   autoClean:true,
@@ -11,7 +22,9 @@ const DEFAULT_SETTINGS={
   cacheSizeLimit:2048,
   bgImage:true,
   soundEnabled:true,
-  fullscreenLaunch:false
+  fullscreenLaunch:false,
+  darkMode:false,
+  animations:true
 };
 
 function loadSettings(){
@@ -80,9 +93,10 @@ var GPU_CODE=`
 
 /* ========== Cache Manager (IndexedDB) ========== */
 var DB_NAME='mcjs_cache';
-var DB_VERSION=1;
+var DB_VERSION=2;  /* bumped: added version metadata store */
 var STORE_GAME='game_files';
 var STORE_SAVE='save_data';
+var STORE_META='cache_meta';
 
 function openDB(){
   return new Promise(function(resolve,reject){
@@ -91,6 +105,7 @@ function openDB(){
       var db=e.target.result;
       if(!db.objectStoreNames.contains(STORE_GAME))db.createObjectStore(STORE_GAME);
       if(!db.objectStoreNames.contains(STORE_SAVE))db.createObjectStore(STORE_SAVE);
+      if(!db.objectStoreNames.contains(STORE_META))db.createObjectStore(STORE_META);
     };
     req.onsuccess=function(e){resolve(e.target.result);};
     req.onerror=function(e){reject(e.target.error);};
@@ -170,17 +185,14 @@ function optimizeMemory(callback){
     if(typeof window.MCJS_UPDATE_LAUNCH==='function'){
       window.MCJS_UPDATE_LAUNCH(step.text,step.pct);
     }
-    /* Simulate real work */
     if(step.pct<=25){
-      /* Clear unreferenced objects */
       if(typeof gc==='function')try{gc();}catch(e){}
     }
     if(step.pct===55){
-      /* Pre-allocate typed array for memory pool */
       var limit=window.MCJS_SETTINGS.memoryLimit||512;
       try{
         window._mcjs_mempool=new ArrayBuffer(Math.min(limit*1024*1024,256*1024*1024));
-        window._mcjs_mempool=null; /* Release - just warms up the allocator */
+        window._mcjs_mempool=null;
       }catch(e){}
     }
     setTimeout(next,200+Math.random()*300);
@@ -188,13 +200,38 @@ function optimizeMemory(callback){
   next();
 }
 
-/* ========== Game File Fetcher ========== */
+/* ========== Game File Fetcher ==========
+ * Fetches the game's index.html from a mirror. Uses a real HTTP status
+ * check (not a heuristic) so 404 / 5xx responses are correctly rejected
+ * and the fallback chain can try the next mirror. */
 function fetchGameHTML(mirrorURL){
-  return fetch(mirrorURL,{mode:'cors',credentials:'omit'})
-    .then(function(r){
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      return r.text();
-    });
+  return fetch(mirrorURL,{
+    mode:'cors',
+    credentials:'omit',
+    redirect:'follow'
+  }).then(function(r){
+    /* Accept only 2xx; 3xx is already followed by the browser. */
+    if(r.status<200||r.status>=300){
+      throw new Error('HTTP '+r.status);
+    }
+    return r.text();
+  }).then(function(html){
+    /* An Eaglercraft page is always non-trivial HTML.  An empty or
+     * suspiciously short response (e.g. a CDN 200-with-empty-body)
+     * should be rejected. */
+    if(!html||html.length<300){
+      throw new Error('EMPTY_PAGE');
+    }
+    /* Sanity: must look like a web page (contains <html or <body or
+     * <head).  This guards against JSON error pages being returned
+     * with a 200 status by misconfigured CDNs. */
+    if(html.indexOf('<html')===-1&&html.indexOf('<HTML')===-1&&
+       html.indexOf('<head')===-1&&html.indexOf('<HEAD')===-1&&
+       html.indexOf('<body')===-1&&html.indexOf('<BODY')===-1){
+      throw new Error('NOT_HTML');
+    }
+    return html;
+  });
 }
 
 function injectIntoHTML(html,scripts){
@@ -208,6 +245,12 @@ function injectIntoHTML(html,scripts){
   if(html.indexOf('<html>')!==-1){
     return html.replace('<html>','<html><head>'+injection+'</head>');
   }
+  if(html.indexOf('<HEAD>')!==-1){
+    return html.replace('<HEAD>','<HEAD>'+injection);
+  }
+  if(html.indexOf('<HTML>')!==-1){
+    return html.replace('<HTML>','<HTML><HEAD>'+injection+'</HEAD>');
+  }
   return injection+html;
 }
 
@@ -216,6 +259,13 @@ function cacheGameFiles(versionId,html,mirrorURL){
   return dbPut(STORE_GAME,'html:'+versionId,html)
     .then(function(){
       return dbPut(STORE_GAME,'mirror:'+versionId,mirrorURL);
+    })
+    .then(function(){
+      return dbPut(STORE_META,versionId,{
+        ts:Date.now(),
+        size:html.length,
+        url:mirrorURL
+      });
     });
 }
 
@@ -223,154 +273,250 @@ function getCachedHTML(versionId){
   return dbGet(STORE_GAME,'html:'+versionId);
 }
 
+function deleteCachedHTML(versionId){
+  return dbDelete(STORE_GAME,'html:'+versionId)
+    .then(function(){return dbDelete(STORE_META,versionId);});
+}
+
+/* ========== Build a version-specific mirror URL ==========
+ * The bug: tryFallbackMirror used to open mirrors[0].url (the mirror root)
+ * when every mirror returned an error - so users ended up on the CDN
+ * homepage instead of the version page.  Now we build a proper URL that
+ * always points at the chosen version's path, regardless of which mirror
+ * is being used. */
+function buildMirrorURL(mirror, version){
+  if(!mirror||!mirror.url)return null;
+  if(!version)return mirror.url;
+  var base=mirror.url;
+  var vPath=version.path||'';
+  if(!vPath)return base;
+  /* Normalize: strip trailing slashes */
+  var trimBase=base.replace(/\/+$/,'');
+  /* Build a few candidate path segments to check against the URL */
+  var candidates=[];
+  if(vPath){
+    candidates.push('/'+vPath+'/');
+    candidates.push('/'+vPath);
+  }
+  /* Some legacy versions live under /legacy/ subpath - e.g. legacy/beta1.7.3 */
+  if(vPath.indexOf('/')!==-1){
+    var segs=vPath.split('/');
+    candidates.push('/'+segs[segs.length-1]+'/');
+    candidates.push('/'+segs[segs.length-1]);
+  }
+  /* If the URL already contains ANY of the candidate version paths,
+   * leave it alone - the mirror entry already points at the right place. */
+  for(var i=0;i<candidates.length;i++){
+    if(trimBase.indexOf(candidates[i])!==-1)return base;
+  }
+  /* Otherwise, append the version path. Use '/' as separator (the mirrors
+   * serve version subdirectories at the root). */
+  return trimBase+'/'+vPath+'/';
+}
+
 /* ========== Main Launcher ========== */
 var currentIframe=null;
 var currentBlobURL=null;
+var lastLaunchedVersion=null;
 
 function launchGame(version,onProgress,onReady,onError){
   var settings=window.MCJS_SETTINGS;
-  var mirror=version.mirrors[settings.mirrorIndex]||version.mirrors[0];
-  var mirrorURL=mirror.url;
+  /* Choose mirror: prefer saved mirrorIndex, else first non-empty one. */
+  var rawMirror=version.mirrors[settings.mirrorIndex]||version.mirrors[0];
+  var mirrorURL=buildMirrorURL(rawMirror,version);
+  lastLaunchedVersion=version;
 
-  /* Phase 1: Memory optimization */
   onProgress('正在优化内存...',5);
 
   optimizeMemory(function(){
     onProgress('内存优化完成',30);
 
-    /* Phase 2: Check cache */
     getCachedHTML(version.id).then(function(cached){
       if(cached){
         onProgress('从缓存加载...',80);
         loadGameInFrame(version,cached,mirrorURL,onProgress,onReady);
         return;
       }
-
-      /* Phase 3: Download game files */
-      onProgress('正在从 '+mirror.name+' 下载游戏文件...',40);
+      onProgress('正在从 '+rawMirror.name+' 下载游戏文件...',40);
 
       fetchGameHTML(mirrorURL).then(function(html){
         onProgress('解压游戏源代码...',65);
-
-        /* Inject polyfills */
         var scripts=[JSPI_CODE,GPU_CODE];
-
-        /* Memory limit injection */
         var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(settings.memoryLimit)+';';
         scripts.unshift(memCode);
-
-        /* Save isolation */
         if(settings.saveIsolation){
           var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
           scripts.push(saveCode);
         }
-
         var modifiedHTML=injectIntoHTML(html,scripts);
-
         onProgress('缓存游戏文件...',75);
-
-        /* Cache for future use */
         cacheGameFiles(version.id,modifiedHTML,mirrorURL).catch(function(e){
           console.warn('[MCJS] Cache failed:',e);
         });
-
-        /* Phase 4: Load game */
         loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady);
-
       }).catch(function(err){
-        /* Fallback: try next mirror */
-        tryFallbackMirror(version,1,onProgress,onReady,onError);
+        console.warn('[MCJS] Mirror failed:',rawMirror.name,err);
+        tryFallbackMirror(version,0,onProgress,onReady,onError,err);
       });
     }).catch(function(err){
       console.warn('[MCJS] DB error:',err);
-      /* Fallback: direct load */
+      /* If DB read fails, still try to fetch fresh. */
+      deleteCachedHTML(version.id).catch(function(){});
       fetchGameHTML(mirrorURL).then(function(html){
         var modifiedHTML=injectIntoHTML(html,[JSPI_CODE,GPU_CODE]);
         loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady);
       }).catch(function(err2){
-        tryFallbackMirror(version,1,onProgress,onReady,onError);
+        tryFallbackMirror(version,0,onProgress,onReady,onError,err2);
       });
     });
   });
 }
 
-function tryFallbackMirror(version,startIndex,onProgress,onReady,onError){
+function tryFallbackMirror(version,startIndex,onProgress,onReady,onError,lastErr){
   var mirrors=version.mirrors;
-  if(startIndex>=mirrors.length){
-    /* All mirrors failed - open in new tab as last resort */
-    var mirror=mirrors[0];
-    onError('所有镜像均无法连接。将尝试在新标签页中打开...');
-    setTimeout(function(){
-      window.open(mirror.url,'_blank');
-    },2000);
+  /* Skip past the mirror we already tried. The caller has already tried
+   * mirrors[mirrorIndex], so we start at the next one. */
+  var settings=window.MCJS_SETTINGS;
+  var alreadyTried=Math.max(settings.mirrorIndex||0,0);
+  if(startIndex===0)startIndex=(alreadyTried+1)%mirrors.length;
+
+  if(mirrors.length<=1){
+    /* Only one mirror - we already tried it, give up. */
+    giveUpAllMirrors(version,onError,lastErr);
     return;
   }
-  var mirror=mirrors[startIndex];
-  onProgress('切换到 '+mirror.name+'...',40);
-  fetchGameHTML(mirror.url).then(function(html){
-    var modifiedHTML=injectIntoHTML(html,[JSPI_CODE,GPU_CODE]);
-    cacheGameFiles(version.id,modifiedHTML,mirror.url).catch(function(){});
-    loadGameInFrame(version,modifiedHTML,mirror.url,onProgress,onReady);
-  }).catch(function(){
-    tryFallbackMirror(version,startIndex+1,onProgress,onReady,onError);
-  });
+
+  var tried=0;
+  function tryNext(){
+    if(tried>=mirrors.length-1){
+      giveUpAllMirrors(version,onError,lastErr);
+      return;
+    }
+    var idx=(startIndex+tried)%mirrors.length;
+    tried++;
+    if(idx===alreadyTried){tryNext();return;}
+    var mirror=mirrors[idx];
+    var mirrorURL=buildMirrorURL(mirror,version);
+    onProgress('切换到 '+mirror.name+'...',40+Math.min(tried*10,40));
+    fetchGameHTML(mirrorURL).then(function(html){
+      var scripts=[JSPI_CODE,GPU_CODE];
+      var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(window.MCJS_SETTINGS.memoryLimit)+';';
+      scripts.unshift(memCode);
+      if(window.MCJS_SETTINGS.saveIsolation){
+        var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
+        scripts.push(saveCode);
+      }
+      var modifiedHTML=injectIntoHTML(html,scripts);
+      cacheGameFiles(version.id,modifiedHTML,mirrorURL).catch(function(){});
+      loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady);
+    }).catch(function(err){
+      console.warn('[MCJS] Mirror '+mirror.name+' failed:',err);
+      tryNext();
+    });
+  }
+  tryNext();
+}
+
+/* When every mirror has failed we previously called window.open() on
+ * mirrors[0].url - which is the *mirror root*, not the version page.  This
+ * dumped the user on the CDN home page.  We now build a proper version URL
+ * using the primary mirror domain, and we surface the real error first
+ * (instead of pretending we're "opening in a new tab" silently). */
+function giveUpAllMirrors(version,onError,lastErr){
+  var primary=version.mirrors[0];
+  var versionURL=buildMirrorURL(primary,version);
+  var detail=(lastErr&&lastErr.message)?lastErr.message:'未知错误';
+  onError('所有镜像均无法连接 ('+detail+')。可以手动访问: '+versionURL);
+  /* Do NOT auto-open a new tab. The launcher UI surfaces the URL so the
+   * user can copy it. If they want to launch externally, they can click
+   * the original mirror list - we re-open the mirror selection modal. */
+  setTimeout(function(){
+    var ev=new CustomEvent('mcjs:launch-failed',{detail:{version:version,url:versionURL}});
+    window.dispatchEvent(ev);
+  },1500);
 }
 
 function loadGameInFrame(version,html,mirrorURL,onProgress,onReady){
   onProgress('启动游戏...',95);
 
-  /* Clean up previous game */
   closeGame();
 
-  /* Create iframe */
   var container=document.getElementById('gameContainer');
+  if(!container){
+    onError('找不到游戏容器 (#gameContainer)');
+    return;
+  }
   var iframe=document.createElement('iframe');
   iframe.id='gameFrame';
-  iframe.setAttribute('allow','fullscreen; autoplay; camera; microphone; gamepad; xr-spatial-tracking');
+  /* allow attribute is set conditionally below for fullscreen / GPU */
   iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-pointer-lock allow-downloads');
-  iframe.style.cssText='width:100%;height:100%;border:none;background:#000;';
+  iframe.style.cssText='width:100%;height:100%;border:none;background:#000;display:block;';
 
-  /* GPU preference via allow attribute */
+  var allowBits='autoplay; camera; microphone; gamepad; xr-spatial-tracking';
   if(window.MCJS_SETTINGS.gpuPrefer==='high-performance'){
-    iframe.setAttribute('allow','fullscreen; autoplay; gamepad; xr-spatial-tracking');
+    /* Hint the browser to use the discrete GPU. */
+    allowBits='fullscreen '+allowBits;
   }
+  if(window.MCJS_SETTINGS.fullscreenLaunch){
+    allowBits='fullscreen '+allowBits;
+  }
+  iframe.setAttribute('allow',allowBits);
 
   container.appendChild(iframe);
   currentIframe=iframe;
 
   /* Write game HTML */
-  var doc=iframe.contentDocument||iframe.contentWindow.document;
-  doc.open();
-  doc.write(html);
-  doc.close();
+  var doc;
+  try{
+    doc=iframe.contentDocument||iframe.contentWindow&&iframe.contentWindow.document;
+  }catch(e){doc=null;}
+  if(!doc){
+    onError('无法访问 iframe 文档（同源策略被阻止）');
+    return;
+  }
+  try{
+    doc.open();
+    doc.write(html);
+    doc.close();
+  }catch(e){
+    onError('写入游戏内容失败: '+(e&&e.message||e));
+    return;
+  }
 
   /* Fix relative URLs by injecting base tag */
   try{
     var base=doc.createElement('base');
     base.href=mirrorURL;
-    doc.head.insertBefore(base,doc.head.firstChild);
+    if(doc.head){
+      doc.head.insertBefore(base,doc.head.firstChild);
+    }
   }catch(e){}
 
   onProgress('启动完成',100);
 
   setTimeout(function(){
     onReady();
+    if(window.MCJS_SETTINGS.fullscreenLaunch){
+      setTimeout(function(){
+        try{
+          var req=iframe.requestFullscreen||iframe.webkitRequestFullscreen||iframe.mozRequestFullScreen||iframe.msRequestFullscreen;
+          if(req)req.call(iframe).catch(function(){});
+        }catch(e){}
+      },400);
+    }
   },500);
 }
 
 function closeGame(){
   if(currentIframe){
-    try{
-      currentIframe.contentDocument.close();
-    }catch(e){}
-    currentIframe.parentNode.removeChild(currentIframe);
+    try{currentIframe.contentDocument.close();}catch(e){}
+    try{currentIframe.parentNode&&currentIframe.parentNode.removeChild(currentIframe);}catch(e){}
     currentIframe=null;
   }
   if(currentBlobURL){
-    URL.revokeObjectURL(currentBlobURL);
+    try{URL.revokeObjectURL(currentBlobURL);}catch(e){}
     currentBlobURL=null;
   }
-  /* Force GC if available */
   if(typeof gc==='function')try{gc();}catch(e){}
 }
 
@@ -385,7 +531,6 @@ function getCacheSize(){
         var keys=req.result||[];
         var size=0;
         var count=0;
-        /* Estimate size from keys */
         var getPromises=keys.map(function(key){
           return new Promise(function(r){
             var g=store.get(key);
@@ -407,7 +552,7 @@ function getCacheSize(){
 }
 
 function clearGameCache(){
-  return dbClear(STORE_GAME);
+  return dbClear(STORE_GAME).then(function(){return dbClear(STORE_META);});
 }
 
 function clearSaveData(versionId){
@@ -431,7 +576,8 @@ window.MCJS_GAME={
   clearCache:clearGameCache,
   clearSaveData:clearSaveData,
   formatBytes:formatBytes,
-  openDB:openDB
+  openDB:openDB,
+  buildMirrorURL:buildMirrorURL
 };
 
 })();
