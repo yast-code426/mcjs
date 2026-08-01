@@ -1,7 +1,3 @@
-# GitHub Pages config
-permalink: pretty
-exclude:
-  - download.sh
-  - versions/
-  - README.md
-  - .gitignore
+theme: jekyll-theme-cayman
+title: MCJS Launcher
+description: Eaglercraft 全版本启动器 - 本地运行，无需跳转

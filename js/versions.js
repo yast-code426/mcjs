@@ -1,5 +1,6 @@
 // MCJS 镜像站 - 版本数据
 // 所有 Eaglercraft/MCJS 版本及镜像链接
+// 已加入可联机(multiplayer) & 整合包(modpack) 分类
 
 const VERSIONS = [
   // === MCJS 优化版（推荐） ===
@@ -13,6 +14,8 @@ const VERSIONS = [
     size: '21.1MB',
     lang: ['简体中文', 'English'],
     features: ['远程联机', '局域网', '触屏支持', '光影渲染'],
+    multiplayer: true,
+    modpack: false,
     description: '兼容性最佳。支持 PC + 手机，局域网 & P2P 联机，光影效果。',
     detail: '⭐ 推荐 | 最佳兼容\n' +
             '🌏 语言：简体中文、英文\n' +
@@ -22,7 +25,6 @@ const VERSIONS = [
             '📂 资源：自定义材质包、内置光影包',
     path: '1.8.8',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/1.8.8/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.8.8/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.8.8/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.8.8/' },
@@ -41,6 +43,8 @@ const VERSIONS = [
     size: '9.6MB',
     lang: ['简体中文', 'English'],
     features: ['远程联机', '局域网', '触屏支持', '光影渲染', '高帧率'],
+    multiplayer: true,
+    modpack: false,
     description: '性能最佳。WASM 增强，更高 FPS。需要现代 Chrome 浏览器。',
     detail: '⭐ 推荐 | 最佳性能\n' +
             '🌏 语言：简体中文、英文\n' +
@@ -50,7 +54,6 @@ const VERSIONS = [
             '📂 资源：自定义材质包、内置光影包',
     path: '1.8.8wasm',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/1.8.8wasm/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.8.8wasm/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.8.8wasm/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.8.8wasm/' },
@@ -69,6 +72,8 @@ const VERSIONS = [
     size: '27.7MB',
     lang: ['简体中文', 'English'],
     features: ['单机'],
+    multiplayer: false,
+    modpack: false,
     description: '最新稳定客户端版本。支持中文。暂不支持多人联机或光影。',
     detail: '🧪 测试版\n' +
             '🌏 语言：简体中文、英文\n' +
@@ -78,7 +83,6 @@ const VERSIONS = [
             '📂 资源：自定义材质包',
     path: '1.12.2',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/1.12.2/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.12.2/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.12.2/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.12.2/' },
@@ -97,6 +101,8 @@ const VERSIONS = [
     size: '15.9MB',
     lang: ['简体中文', 'English'],
     features: ['单机'],
+    multiplayer: false,
+    modpack: false,
     description: '1.12.2 的 WASM 版本。性能更好，仍在测试中。',
     detail: '🧪 测试版\n' +
             '🌏 语言：简体中文、英文\n' +
@@ -106,7 +112,6 @@ const VERSIONS = [
             '📂 资源：自定义材质包',
     path: '1.12.2wasm',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/1.12.2wasm/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.12.2wasm/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.12.2wasm/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.12.2wasm/' },
@@ -125,6 +130,8 @@ const VERSIONS = [
     size: '17.9MB',
     lang: ['English'],
     features: ['远程联机', '局域网', '导出存档'],
+    multiplayer: true,
+    modpack: false,
     description: 'u3：新增存档导出和远程多人联机。切换语言会导致游戏崩溃（仅限英文）。',
     detail: '🧪 测试版\n' +
             '❓ 与 1.12.2 u2 版的区别：此 u3 版新增了导出世界和远程联机支持，修复了部分渲染问题，但是有新 bug：切换语言会导致游戏崩溃，故只有英文版\n' +
@@ -135,7 +142,6 @@ const VERSIONS = [
             '📂 资源：自定义材质包',
     path: '1.12.2u3wasm',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/1.12.2u3wasm/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.12.2u3wasm/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.12.2u3wasm/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.12.2u3wasm/' },
@@ -156,6 +162,8 @@ const VERSIONS = [
     size: '50.6MB',
     lang: ['English'],
     features: ['远程联机', '局域网'],
+    multiplayer: true,
+    modpack: false,
     description: '下界更新移植版！非常早期的 Beta。需要高配电脑。仅限英文。',
     detail: '🚀 新版测试\n' +
             '🌏 语言：仅英文原版\n' +
@@ -165,8 +173,7 @@ const VERSIONS = [
             '📂 资源：自定义材质包',
     path: '1.16.5',
     mirrors: [
-      { name: 'Beta 站', url: 'https://mcjs-beta.144449.xyz/1.16.5' },
-      { name: '主站', url: 'https://play.mcjs.cc/beta/1.16.5' }
+      { name: 'Beta 站', url: 'https://mcjs-beta.144449.xyz/1.16.5' }
     ],
     external: true
   },
@@ -180,6 +187,8 @@ const VERSIONS = [
     size: '49.5MB',
     lang: ['English'],
     features: ['单机', '局域网'],
+    multiplayer: false,
+    modpack: false,
     description: '棘巧试炼更新。极度早期版本，可能导致浏览器崩溃。仅限英文。',
     detail: '🚀 新版测试\n' +
             '⚠️ 巨卡慎选！容易导致浏览器崩溃\n' +
@@ -190,8 +199,7 @@ const VERSIONS = [
             '📂 资源：自定义材质包',
     path: '1.21.11',
     mirrors: [
-      { name: 'Beta 站', url: 'https://mcjs-beta.144449.xyz/1.21.11' },
-      { name: '主站', url: 'https://play.mcjs.cc/beta/1.21.11' }
+      { name: 'Beta 站', url: 'https://mcjs-beta.144449.xyz/1.21.11' }
     ],
     external: true
   },
@@ -205,6 +213,8 @@ const VERSIONS = [
     size: '61.6MB',
     lang: ['English'],
     features: ['单机', '局域网'],
+    multiplayer: false,
+    modpack: false,
     description: '前沿版本。非常不稳定，可能崩溃。仅限英文。',
     detail: '🚀 新版测试\n' +
             '⚠️ 巨卡慎选！容易导致浏览器崩溃\n' +
@@ -215,8 +225,120 @@ const VERSIONS = [
             '📂 资源：自定义材质包',
     path: '26.1.2',
     mirrors: [
-      { name: 'Beta 站', url: 'https://mcjs-beta.144449.xyz/26.1.2' },
-      { name: '主站', url: 'https://play.mcjs.cc/beta/26.1.2' }
+      { name: 'Beta 站', url: 'https://mcjs-beta.144449.xyz/26.1.2' }
+    ],
+    external: true
+  },
+
+  // === 模组整合包 Eaglercraft 客户端 ===
+  {
+    id: '1.6.4-forge-lite',
+    name: 'Eaglercraft 1.6.4 Forge "Lite" 轻量整合包',
+    version: 'MC JE 1.6.4 Forge Modpack WASM-GC',
+    author: 'lax1dude',
+    type: 'beta',
+    engine: 'WASM',
+    size: '未知',
+    lang: ['English'],
+    features: ['远程联机', '局域网', '模组支持'],
+    multiplayer: true,
+    modpack: true,
+    description: '1.6.4 Forge 轻量模组整合包。需要高性能电脑。仅限英文。',
+    detail: '🧪 测试版 | 模组整合包\n' +
+            '🌏 语言：仅英文原版\n' +
+            '💻 性能：较低\n' +
+            '🎮 设备：仅支持电脑键鼠操作\n' +
+            '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '📂 资源：自定义材质包、内置模组包',
+    path: '1.6.4lite',
+    mirrors: [
+      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4lite/' },
+      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4lite/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4lite/' }
+    ],
+    external: true
+  },
+  {
+    id: '1.6.4-forge-tech',
+    name: 'Eaglercraft 1.6.4 Forge "Tech" 硬核科技整合包',
+    version: 'MC JE 1.6.4 Forge Modpack WASM-GC',
+    author: 'lax1dude',
+    type: 'beta',
+    engine: 'WASM',
+    size: '未知',
+    lang: ['English'],
+    features: ['远程联机', '局域网', '模组支持'],
+    multiplayer: true,
+    modpack: true,
+    description: '1.6.4 Forge 硬核科技模组整合包。文件大，启动久。仅限英文。',
+    detail: '🧪 测试版 | 模组整合包\n' +
+            '⚠️ 文件较大，启动时间特别久\n' +
+            '🌏 语言：仅英文原版\n' +
+            '💻 性能：低（建议使用高性能的电脑）\n' +
+            '🎮 设备：仅支持电脑键鼠操作\n' +
+            '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '📂 资源：自定义材质包、内置模组包',
+    path: '1.6.4tech',
+    mirrors: [
+      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4tech/' },
+      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4tech/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4tech/' }
+    ],
+    external: true
+  },
+  {
+    id: '1.6.4-forge-skyfactory',
+    name: 'Eaglercraft 1.6.4 Forge "Skyfactory" 天空工厂整合包',
+    version: 'MC JE 1.6.4 Forge Modpack WASM-GC',
+    author: 'lax1dude',
+    type: 'beta',
+    engine: 'WASM',
+    size: '未知',
+    lang: ['English'],
+    features: ['远程联机', '局域网', '模组支持'],
+    multiplayer: true,
+    modpack: true,
+    description: '1.6.4 Forge 天空工厂模组整合包。文件大，启动久。仅限英文。',
+    detail: '🧪 测试版 | 模组整合包\n' +
+            '⚠️ 文件较大，启动时间特别久\n' +
+            '🌏 语言：仅英文原版\n' +
+            '💻 性能：低（建议使用高性能的电脑）\n' +
+            '🎮 设备：仅支持电脑键鼠操作\n' +
+            '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '📂 资源：自定义材质包、内置模组包',
+    path: '1.6.4skyfactory',
+    mirrors: [
+      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4skyfactory/' },
+      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4skyfactory/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4skyfactory/' }
+    ],
+    external: true
+  },
+  {
+    id: '1.6.4-forge-magic',
+    name: 'Eaglercraft 1.6.4 Forge "Magic" 神奇魔法整合包',
+    version: 'MC JE 1.6.4 Forge Modpack WASM-GC',
+    author: 'lax1dude',
+    type: 'beta',
+    engine: 'WASM',
+    size: '未知',
+    lang: ['English'],
+    features: ['远程联机', '局域网', '模组支持'],
+    multiplayer: true,
+    modpack: true,
+    description: '1.6.4 Forge 神奇魔法模组整合包。文件大，启动久。仅限英文。',
+    detail: '🧪 测试版 | 模组整合包\n' +
+            '⚠️ 文件较大，启动时间特别久\n' +
+            '🌏 语言：仅英文原版\n' +
+            '💻 性能：低（建议使用高性能的电脑）\n' +
+            '🎮 设备：仅支持电脑键鼠操作\n' +
+            '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '📂 资源：自定义材质包、内置模组包',
+    path: '1.6.4magic',
+    mirrors: [
+      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4magic/' },
+      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4magic/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4magic/' }
     ],
     external: true
   },
@@ -232,6 +354,8 @@ const VERSIONS = [
     size: '23.5MB',
     lang: ['English'],
     features: ['单机'],
+    multiplayer: false,
+    modpack: false,
     description: '马匹更新。仅限英文，怀旧体验。',
     detail: '📜 经典版\n' +
             '🌏 语言：仅英文原版\n' +
@@ -239,7 +363,6 @@ const VERSIONS = [
             '🔗 联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: '1.6.4',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/1.6.4/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4/' },
@@ -258,6 +381,8 @@ const VERSIONS = [
     size: '20.2MB',
     lang: ['English'],
     features: ['单机'],
+    multiplayer: false,
+    modpack: false,
     description: '最初的 Eaglercraft 版本。红石更新时代。仅限英文。',
     detail: '📜 经典版\n' +
             '🌏 语言：仅英文原版\n' +
@@ -265,7 +390,6 @@ const VERSIONS = [
             '🔗 联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: '1.5.2',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/1.5.2/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.5.2/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.5.2/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.5.2/' },
@@ -284,6 +408,8 @@ const VERSIONS = [
     size: '21.3MB',
     lang: ['English'],
     features: ['单机'],
+    multiplayer: false,
+    modpack: false,
     description: 'Minecraft 经典时代。仅限英文，复古体验。',
     detail: '📜 经典版\n' +
             '🌏 语言：仅英文原版\n' +
@@ -291,7 +417,6 @@ const VERSIONS = [
             '🔗 联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: '1.2.5',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/1.2.5/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.2.5/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.2.5/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.2.5/' },
@@ -310,6 +435,8 @@ const VERSIONS = [
     size: '15.6MB',
     lang: ['English'],
     features: ['单机'],
+    multiplayer: false,
+    modpack: false,
     description: 'Beta 时代 Minecraft。仅限英文，怀旧体验。',
     detail: '📜 经典版\n' +
             '🌏 语言：仅英文原版\n' +
@@ -317,7 +444,6 @@ const VERSIONS = [
             '🔗 联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: 'legacy/beta1.7.3',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/legacy/beta1.7.3/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/legacy/beta1.7.3/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/legacy/beta1.7.3/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/legacy/beta1.7.3/' },
@@ -336,6 +462,8 @@ const VERSIONS = [
     size: '4.3MB',
     lang: ['English'],
     features: ['单机'],
+    multiplayer: false,
+    modpack: false,
     description: '最早的 Eaglercraft 单机版本。仅限英文，非常复古。',
     detail: '📜 经典版\n' +
             '🌏 语言：仅英文原版\n' +
@@ -343,7 +471,6 @@ const VERSIONS = [
             '🔗 联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: 'legacy/beta1.3',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/legacy/beta1.3/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/legacy/beta1.3/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/legacy/beta1.3/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/legacy/beta1.3/' },
@@ -362,6 +489,8 @@ const VERSIONS = [
     size: '8.2MB',
     lang: ['English'],
     features: ['单机'],
+    multiplayer: false,
+    modpack: false,
     description: 'Alpha 时代 Minecraft。最早的 Eaglercraft 可玩版本。仅限英文。',
     detail: '📜 经典版\n' +
             '🌏 语言：仅英文原版\n' +
@@ -369,7 +498,6 @@ const VERSIONS = [
             '🔗 联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: 'legacy/alpha1.2.6',
     mirrors: [
-      { name: '主站', url: 'https://play.mcjs.cc/legacy/alpha1.2.6/' },
       { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/legacy/alpha1.2.6/' },
       { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/legacy/alpha1.2.6/' },
       { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/legacy/alpha1.2.6/' },
@@ -382,7 +510,6 @@ const VERSIONS = [
 
 // 镜像备用链接
 const MIRROR_BASES = [
-  'https://play.mcjs.cc',
   'https://playmcjscc.pages.dev',
   'https://play.mcjs.144449.xyz',
   'https://ipv6.mcjs.cc',
