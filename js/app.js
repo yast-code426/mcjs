@@ -583,6 +583,19 @@ document.getElementById('clearSaveBtn').addEventListener('click',function(){
   }
 });
 
+/* Reset OS-gate acknowledgment so the next page-load shows the
+ * compatibility notice again.  Useful for users who want to test the
+ * notice on a different browser, or who clicked "继续" by mistake. */
+var resetOsGateBtn=document.getElementById('resetOsGateBtn');
+if(resetOsGateBtn){
+  resetOsGateBtn.addEventListener('click',function(){
+    if(sound)sound.click();
+    if(typeof window.MCJS_RESET_OS_GATE==='function')window.MCJS_RESET_OS_GATE();
+    /* Reload so the gate re-evaluates against the current UA. */
+    location.reload();
+  });
+}
+
 /* ========== Modal Close Handlers ========== */
 document.getElementById('modalClose').addEventListener('click',function(){
   if(sound)sound.close();
@@ -716,6 +729,104 @@ if(settings.bgImage===false){
   document.body.classList.add('no-bg');
 }
 applyTheme();
+
+/* ========== OS Gate (Linux / Chrome OS / BSD / unknown) ==========
+ * Show a full-screen "你的系统并不支持运行，是否继续？" notice when the
+ * user is on an OS that the launcher hasn't been tested against
+ * (Windows / macOS / Android / iOS are considered supported).
+ *
+ * The gate is shown ONCE per browser (per localStorage flag) unless the
+ * user explicitly resets it in settings.  When the user clicks "继续",
+ * the rest of the launcher is initialised.  When they click "放弃访问",
+ * we redirect to a blank page.
+ */
+(function osGate(){
+  /* Supported = the user-agent matches one of these substrings.
+   * "Linux" intentionally NOT included. */
+  var SUPPORTED_RE=/Windows NT|Mac OS X|Macintosh|iPhone|iPad|iPod|Android/i;
+  var NAME_MAP=[
+    {re:/Windows NT 10\.0/,name:'Windows 10/11'},
+    {re:/Windows NT 6\.3/,name:'Windows 8.1'},
+    {re:/Windows NT 6\.2/,name:'Windows 8'},
+    {re:/Windows NT 6\.1/,name:'Windows 7'},
+    {re:/Windows NT/,name:'Windows'},
+    {re:/iPhone|iPad|iPod/,name:'iOS'},
+    {re:/Android/,name:'Android'},
+    {re:/Mac OS X|Macintosh/,name:'macOS'}
+  ];
+  function detectOS(ua){
+    for(var i=0;i<NAME_MAP.length;i++){
+      if(NAME_MAP[i].re.test(ua))return NAME_MAP[i].name;
+    }
+    if(/Linux/i.test(ua))return 'Linux';
+    if(/CrOS/.test(ua))return 'Chrome OS';
+    if(/BSD/.test(ua))return 'BSD';
+    if(/X11/.test(ua))return 'Unix-like';
+    return '未知系统';
+  }
+  var ua=navigator.userAgent||'';
+  var osName=detectOS(ua);
+  var supported=SUPPORTED_RE.test(ua);
+
+  /* Has the user already acknowledged the gate this session / previously? */
+  var ackKey='mcjs_os_gate_ack';
+  try{
+    var ack=localStorage.getItem(ackKey);
+    if(ack==='1'||ack==='skipped'){return;}  /* proceed straight to startLauncher */
+  }catch(e){}
+
+  /* If the OS is supported OR the UA looks suspicious (bots / headless),
+   * do not block them.  This is a courtesy gate, not a security control. */
+  if(supported)return;
+
+  /* Build the gate UI inline so it works even before DOMContentLoaded.
+   * We render via DOM API rather than innerHTML to avoid any chance of
+   * an XSS via UA string fields. */
+  var gate=document.getElementById('osGate');
+  if(!gate)return;
+  var osEl=document.getElementById('osGateOs');
+  if(osEl)osEl.textContent='检测到您的操作系统：'+osName+' (User-Agent 提示)';
+
+  gate.style.display='flex';
+  /* Freeze the page underneath (prevent scroll / interaction with #app). */
+  document.documentElement.style.overflow='hidden';
+  document.body.style.overflow='hidden';
+
+  function close(remember){
+    gate.style.display='none';
+    document.documentElement.style.overflow='';
+    document.body.style.overflow='';
+    if(remember){
+      try{localStorage.setItem(ackKey,'1');}catch(e){}
+    }
+  }
+  var continueBtn=document.getElementById('osGateContinue');
+  var leaveBtn=document.getElementById('osGateLeave');
+  if(continueBtn){
+    continueBtn.addEventListener('click',function(){close(true);});
+  }
+  if(leaveBtn){
+    leaveBtn.addEventListener('click',function(){
+      /* Try to close the tab; fall back to about:blank. */
+      try{window.close();}catch(e){}
+      setTimeout(function(){
+        try{window.location.replace('about:blank');}catch(e){}
+        document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#06060c;color:#fff;font-family:sans-serif;padding:24px;text-align:center;">已放弃访问。请关闭此标签页。</div>';
+      },50);
+    });
+  }
+  /* ESC key on the gate → also leave. */
+  document.addEventListener('keydown',function(e){
+    if(gate.style.display==='none')return;
+    if(e.key==='Escape'){
+      if(leaveBtn)leaveBtn.click();
+    }
+  });
+  /* Expose a reset hook for settings. */
+  window.MCJS_RESET_OS_GATE=function(){
+    try{localStorage.removeItem(ackKey);}catch(e){}
+  };
+})();
 
 /* ========== Init ========== */
 (function init(){

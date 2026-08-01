@@ -234,24 +234,50 @@ function fetchGameHTML(mirrorURL){
   });
 }
 
-function injectIntoHTML(html,scripts){
-  var injection='';
+function injectIntoHTML(html,scripts,baseURL){
+  /* Build the injection.  CRITICAL: <base href> MUST come BEFORE any
+   * <script src="..."> or other relative URL, because the browser uses
+   * the current <base> when resolving relative URLs at parse time.
+   *
+   * Bug history:
+   *  - Previously injected <base> AFTER the document was already parsed,
+   *    so <script src="classes.js"> (and assets.epk, lang/) resolved
+   *    against the parent's origin (about:blank / localhost), causing
+   *    classes.js to 404 → main() undefined → grey screen.
+   *  - Previously the base tag was inserted via DOM AFTER doc.write, so
+   *    the iframe's parser had already decided where to fetch classes.js
+   *    from.
+   *
+   * Fix:
+   *  - Inject the <base> as the very first element inside <head> so it
+   *    influences every subsequent relative-URL lookup. */
+  var baseTag=baseURL?'<base href="'+escapeAttr(baseURL)+'">':'';
+  var scriptsTag='';
   for(var i=0;i<scripts.length;i++){
-    injection+='<script>'+scripts[i]+'<\/script>';
+    scriptsTag+='<script>'+scripts[i]+'<\/script>';
   }
+  var injection=baseTag+scriptsTag;
+  /* Preserve the order: <base> → <head> → user scripts.
+   * Match both <head> and <HEAD> (some mirrors vary). */
   if(html.indexOf('<head>')!==-1){
     return html.replace('<head>','<head>'+injection);
   }
-  if(html.indexOf('<html>')!==-1){
-    return html.replace('<html>','<html><head>'+injection+'</head>');
-  }
   if(html.indexOf('<HEAD>')!==-1){
     return html.replace('<HEAD>','<HEAD>'+injection);
+  }
+  if(html.indexOf('<html>')!==-1){
+    return html.replace('<html>','<html><head>'+injection+'</head>');
   }
   if(html.indexOf('<HTML>')!==-1){
     return html.replace('<HTML>','<HTML><HEAD>'+injection+'</HEAD>');
   }
   return injection+html;
+}
+
+/* Escape attribute values so a malicious mirror URL can't break out of
+ * the <base href="..."> tag. */
+function escapeAttr(s){
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 /* ========== Cache Game Files ========== */
@@ -264,13 +290,20 @@ function cacheGameFiles(versionId,html,mirrorURL){
       return dbPut(STORE_META,versionId,{
         ts:Date.now(),
         size:html.length,
-        url:mirrorURL
+        url:mirrorURL,
+        /* Bump this whenever the injection logic changes. Cached HTML
+         * with a lower version is automatically discarded on read. */
+        schema: 2
       });
     });
 }
 
 function getCachedHTML(versionId){
-  return dbGet(STORE_GAME,'html:'+versionId);
+  return dbGet(STORE_META,versionId).then(function(meta){
+    /* Reject outdated cached HTML (missing base tag → grey-screen bug). */
+    if(!meta||meta.schema!==2)return null;
+    return dbGet(STORE_GAME,'html:'+versionId);
+  });
 }
 
 function deleteCachedHTML(versionId){
@@ -348,7 +381,7 @@ function launchGame(version,onProgress,onReady,onError){
           var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
           scripts.push(saveCode);
         }
-        var modifiedHTML=injectIntoHTML(html,scripts);
+        var modifiedHTML=injectIntoHTML(html,scripts,mirrorURL);
         onProgress('缓存游戏文件...',75);
         cacheGameFiles(version.id,modifiedHTML,mirrorURL).catch(function(e){
           console.warn('[MCJS] Cache failed:',e);
@@ -363,7 +396,7 @@ function launchGame(version,onProgress,onReady,onError){
       /* If DB read fails, still try to fetch fresh. */
       deleteCachedHTML(version.id).catch(function(){});
       fetchGameHTML(mirrorURL).then(function(html){
-        var modifiedHTML=injectIntoHTML(html,[JSPI_CODE,GPU_CODE]);
+        var modifiedHTML=injectIntoHTML(html,[JSPI_CODE,GPU_CODE],mirrorURL);
         loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady);
       }).catch(function(err2){
         tryFallbackMirror(version,0,onProgress,onReady,onError,err2);
@@ -406,7 +439,7 @@ function tryFallbackMirror(version,startIndex,onProgress,onReady,onError,lastErr
         var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
         scripts.push(saveCode);
       }
-      var modifiedHTML=injectIntoHTML(html,scripts);
+      var modifiedHTML=injectIntoHTML(html,scripts,mirrorURL);
       cacheGameFiles(version.id,modifiedHTML,mirrorURL).catch(function(){});
       loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady);
     }).catch(function(err){
@@ -483,14 +516,11 @@ function loadGameInFrame(version,html,mirrorURL,onProgress,onReady){
     return;
   }
 
-  /* Fix relative URLs by injecting base tag */
-  try{
-    var base=doc.createElement('base');
-    base.href=mirrorURL;
-    if(doc.head){
-      doc.head.insertBefore(base,doc.head.firstChild);
-    }
-  }catch(e){}
+  /* NOTE: <base href="..."> is now injected INTO the HTML string by
+   * injectIntoHTML(html, scripts, mirrorURL) BEFORE the HTML reaches
+   * doc.write().  The previous post-write DOM insertBefore did NOT
+   * influence classes.js / assets.epk / lang/ resolution, because the
+   * parser had already kicked off those relative-URL fetches. */
 
   onProgress('启动完成',100);
 

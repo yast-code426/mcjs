@@ -24,6 +24,38 @@
     </div>
   </div>
 
+  <!-- Unsupported-OS gate (Linux / Chrome OS / BSD / unknown) -->
+  <!-- Shown via JS on first visit.  User must click "继续" to enter. -->
+  <div id="osGate" class="os-gate" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="osGateTitle">
+    <div class="os-gate-backdrop"></div>
+    <div class="os-gate-card">
+      <div class="os-gate-icon" aria-hidden="true">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <h2 class="os-gate-title" id="osGateTitle">系统兼容性提示</h2>
+      <p class="os-gate-os" id="osGateOs">检测到您的操作系统：未知</p>
+      <p class="os-gate-msg">
+        您的系统<strong>并不被官方支持</strong>，可能会遇到以下问题：
+      </p>
+      <ul class="os-gate-list">
+        <li>游戏可能无法启动、闪退或卡死</li>
+        <li>WASM 版本性能可能极低</li>
+        <li>存档、联机等部分功能可能异常</li>
+        <li>官方仅测试 Windows / macOS / Android / iOS 平台</li>
+      </ul>
+      <p class="os-gate-ask">是否仍要继续访问？</p>
+      <div class="os-gate-actions">
+        <button class="os-gate-btn os-gate-btn-secondary" id="osGateLeave" type="button">放弃访问</button>
+        <button class="os-gate-btn os-gate-btn-primary" id="osGateContinue" type="button">仍然继续</button>
+      </div>
+      <p class="os-gate-hint">提示：在设置中可以重置此提示</p>
+    </div>
+  </div>
+
   <!-- No-script fallback -->
   <noscript>
     <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:#fff;font-family:sans-serif;padding:20px;text-align:center;z-index:9999;">
@@ -265,6 +297,7 @@
           </div>
           <button class="action-btn" id="clearCacheBtn">清除游戏缓存</button>
           <button class="action-btn" id="clearSaveBtn" style="margin-top:6px;">清除所有存档</button>
+          <button class="action-btn" id="resetOsGateBtn" style="margin-top:6px;">重新显示 OS 兼容性提示</button>
         </div>
 
         <!-- Appearance -->
