@@ -402,6 +402,17 @@ function renderMirrorSelection(ver){
   document.getElementById('autoLaunchBtn').addEventListener('keydown', function(e){
     if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); startGameLaunch(ver); }
   });
+  document.getElementById('modalClose').addEventListener('click', function(){
+  if(sound) sound.close();
+  launchModal.classList.remove('active');
+});
+
+launchModal.addEventListener('click', function(e){
+  if(e.target === launchModal){
+    if(sound) sound.close();
+    launchModal.classList.remove('active');
+  }
+});
   container.querySelectorAll('.mirror-item').forEach(function(el){
     el.addEventListener('click', function(){
       if(sound) sound.click();
