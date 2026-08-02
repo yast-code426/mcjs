@@ -234,6 +234,212 @@ function fetchGameHTML(mirrorURL){
   });
 }
 
+/* ========== Game HTML Augmentation ==========
+ * The game HTML (mirror-side) has three visual flaws that surface as a
+ * "black screen" for the end user:
+ *
+ *   1. <html style="background-color:black"> – the host HTML element is
+ *      pure black, so while classes.js (~6-8 MB) is downloading the user
+ *      stares at pure black, no spinner, no progress.  Users report this
+ *      as "黑屏" (black screen) and conclude "协议都没加载出来".
+ *   2. <body><div id="game_frame" style="background-color:gray">… – a
+ *      solid gray box even before the WebGL canvas mounts.
+ *   3. <div class="overlay" id="protocolModal">… – a Chinese EULA
+ *      modal that has to be clicked through.  After the user agrees,
+ *      Eaglercraft's own MainMenu shows ITS OWN English EULA on the
+ *      canvas (which renders as a near-white rectangle) – also reported
+ *      as "黑屏" / "白屏" by confused users.
+ *
+ * Fix strategy:
+ *   - Inject a <style> block that overrides the html / body / game_frame
+ *     background to a friendly dark-gray gradient so the iframe is no
+ *     longer "pure black" during load.
+ *   - Inject a <script> that auto-clicks #agreeBtn as soon as the modal
+ *     appears, so the user never sees a stuck protocol screen.
+ *   - Inject a second <script> that, after Eaglercraft runtime loads,
+ *     inspects the canvas pixels and auto-accepts the EaglercraftX
+ *     in-canvas EULA by clicking wherever the "I agree" button is
+ *     rendered.  (Best-effort, no-ops cleanly if the runtime hasn't
+ *     initialised yet.)
+ */
+function buildHostCSS(){
+  /* Return the *raw* CSS so the caller can wrap it in a <style> tag. */
+  return [
+    /* Replace the mirror's hard black <html> bg with a soft dark gradient.
+       This alone removes the "8 seconds of pure black before protocol" UX. */
+    'html, body { background: #1c1d24 !important; background-image: radial-gradient(ellipse at 50% 30%, #2a2d38 0%, #0d0e12 100%) !important; color: #d6d8de !important; }',
+    /* Hide the mirror's gray #game_frame backdrop so the host gradient shows
+       through.  The canvas paints on top as soon as WebGL mounts. */
+    '#game_frame { background: transparent !important; }',
+    /* Eaglercraft uses position:fixed body and a dark canvas backdrop.  Force
+       visibility. */
+    'canvas { background: transparent !important; }',
+    /* If the mirror uses any other ".overlay" element, make sure ours is on
+       top.  (Defensive – not always present.) */
+    '.overlay, [id*="protocol"], [id*="eula"] { z-index: 10000 !important; }',
+    /* ---- MCJS host loader overlay (loading spinner phase) ---- */
+    '#mcjs-host-loader { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 14px; pointer-events: none; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #d6d8de; text-shadow: 0 1px 3px rgba(0,0,0,0.6); }',
+    '#mcjs-host-loader .ring { width: 44px; height: 44px; border: 3px solid rgba(214, 216, 222, 0.18); border-top-color: #5cb85c; border-radius: 50%; animation: mcjs-spin 0.7s linear infinite; box-shadow: 0 0 24px rgba(92, 184, 92, 0.18); }',
+    '@keyframes mcjs-spin { to { transform: rotate(360deg); } }',
+    '#mcjs-host-loader .label { font-size: 13px; letter-spacing: 0.5px; opacity: 0.88; }',
+    '#mcjs-host-loader .sublabel { font-size: 11px; opacity: 0.55; max-width: 240px; text-align: center; line-height: 1.5; }',
+    '#mcjs-host-loader.hidden { display: none !important; }',
+    /* ---- MCJS unlock overlay (audio-unlock prompt phase) ----
+       This is the *visible* fix for the "stuck on near-black MainMenu"
+       problem.  EaglercraftX refuses to draw the MainMenu until the user
+       performs a real (isTrusted) key/pointer gesture, because the
+       browser AudioContext is suspended until then.  We display a
+       fullscreen, very obvious overlay that:
+         - captures all pointer/key events on the iframe;
+         - on the FIRST isTrusted event, removes itself so the same
+           event reaches the Eaglercraft MainMenu underneath.
+       We deliberately do NOT synthesise KeyboardEvent / MouseEvent:
+       those are isTrusted=false, and Eaglercraft explicitly ignores
+       them, so the menu would stay black forever. */
+    '#mcjs-unlock-overlay { position: fixed; inset: 0; z-index: 2147483600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: rgba(13, 14, 18, 0.78); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #f0f2f6; text-align: center; padding: 24px; cursor: pointer; user-select: none; -webkit-user-select: none; transition: opacity .25s ease; }',
+    '#mcjs-unlock-overlay.mcjs-fade { opacity: 0; pointer-events: none; }',
+    '#mcjs-unlock-overlay .uc-title { font-size: 26px; font-weight: 700; letter-spacing: 1px; text-shadow: 0 2px 12px rgba(0,0,0,0.7); }',
+    '#mcjs-unlock-overlay .uc-sub { font-size: 14px; opacity: 0.75; max-width: 360px; line-height: 1.6; }',
+    '#mcjs-unlock-overlay .uc-btn { margin-top: 8px; padding: 14px 38px; font-size: 16px; font-weight: 600; color: #0d0e12; background: linear-gradient(180deg, #7ad06d 0%, #5cb85c 100%); border: none; border-radius: 10px; box-shadow: 0 4px 24px rgba(92, 184, 92, 0.45), inset 0 1px 0 rgba(255,255,255,0.25); cursor: pointer; letter-spacing: 2px; animation: mcjs-pulse 1.6s ease-in-out infinite; }',
+    '#mcjs-unlock-overlay .uc-btn:hover { background: linear-gradient(180deg, #8ddd77 0%, #6dc86d 100%); }',
+    '#mcjs-unlock-overlay .uc-hint { font-size: 12px; opacity: 0.5; margin-top: 4px; }',
+    '@keyframes mcjs-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 4px 24px rgba(92, 184, 92, 0.45), inset 0 1px 0 rgba(255,255,255,0.25); } 50% { transform: scale(1.04); box-shadow: 0 8px 32px rgba(92, 184, 92, 0.65), inset 0 1px 0 rgba(255,255,255,0.3); } }'
+  ].join('\n');
+}
+
+function buildHostJS(){
+  /* Self-contained: auto-accept the mirror-side Chinese EULA modal,
+     then once the Eaglercraft WebGL canvas mounts, show a full-screen
+     "click to enter" overlay.
+
+     Why this exists:
+       EaglercraftX 1.8.8 refuses to draw the MainMenu until the
+       browser's AudioContext is resumed.  The AudioContext can only
+       be resumed by an isTrusted=true user gesture.  Synthesised
+       KeyboardEvent / MouseEvent are isTrusted=false, so the previous
+       "auto-press a/y" loop did nothing useful and the MainMenu
+       stayed near-black.
+
+       The overlay receives the user's real click / keypress, then
+       removes itself in the same tick WITHOUT calling
+       stopPropagation / preventDefault - so the same physical event
+       also reaches the Eaglercraft MainMenu underneath (the menu's
+       "Singleplayer" / "Options" / etc. buttons receive the click
+       and respond normally). */
+  return [
+    '(function(){',
+    '  if(window.__MCJS_HOST_ARMED)return;window.__MCJS_HOST_ARMED=true;',
+    '  function $(s,r){return (r||document).querySelector(s);}',
+    '  function fire(el,type){',
+    '    try{var ev=new MouseEvent(type,{bubbles:true,cancelable:true,view:window,button:0});el.dispatchEvent(ev);}catch(e){}',
+    '  }',
+    '  /* ---- Small loading spinner (shown until canvas mounts) ---- */',
+    '  function injectLoader(){',
+    '    if(document.getElementById("mcjs-host-loader"))return;',
+    '    var d=document.createElement("div");',
+    '    d.id="mcjs-host-loader";',
+    '    var ring=document.createElement("div");ring.className="ring";d.appendChild(ring);',
+    '    var lab=document.createElement("div");lab.className="label";lab.textContent="游戏加载中...";d.appendChild(lab);',
+    '    var sub=document.createElement("div");sub.className="sublabel";sub.textContent="首次加载约 15 MB，请稍候";d.appendChild(sub);',
+    '    (document.body||document.documentElement).appendChild(d);',
+    '    try{d.offsetHeight;}catch(e){}',
+    '  }',
+    '  function hideLoader(){',
+    '    var d=document.getElementById("mcjs-host-loader");',
+    '    if(!d)return;',
+    '    if(d._mcjsHideTimer)return;',
+    '    d._mcjsHideTimer=setTimeout(function(){d.classList.add("hidden");},300);',
+    '  }',
+    '  try{injectLoader();}catch(e){}',
+    '  document.addEventListener("DOMContentLoaded",injectLoader);',
+    '  window.addEventListener("load",injectLoader);',
+    '  /* ---- Auto-dismiss the mirror-side Chinese EULA modal ---- */',
+    '  function clickAgree(){',
+    '    var btn=$("#agreeBtn")||$("button.agree-btn")||$("[id*=agree i]")||$("button[id*=ok i]");',
+    '    if(btn){fire(btn,"mouseover");fire(btn,"mousedown");fire(btn,"mouseup");fire(btn,"click");}',
+    '    var modal=$("#protocolModal")||$(".overlay");',
+    '    if(modal){',
+    '      try{modal.style.transition="opacity .25s";modal.style.opacity="0";',
+    '           setTimeout(function(){modal.style.display="none";},260);}catch(e){}',
+    '    }',
+    '  }',
+    '  document.addEventListener("DOMContentLoaded",function(){setTimeout(clickAgree,30);setTimeout(clickAgree,200);});',
+    '  window.addEventListener("load",function(){setTimeout(clickAgree,30);setTimeout(clickAgree,200);setTimeout(clickAgree,800);});',
+    '  var tries=0;var iv=setInterval(function(){tries++;injectLoader();clickAgree();if(tries>60)clearInterval(iv);},500);',
+    '  /* ---- Full-screen unlock overlay ---- */',
+    '  var overlayShown=false,overlayEl=null;',
+    '  function showUnlockOverlay(){',
+    '    if(overlayShown)return;',
+    '    overlayShown=true;',
+    '    hideLoader();',
+    '    if(document.getElementById("mcjs-unlock-overlay")){overlayEl=document.getElementById("mcjs-unlock-overlay");return;}',
+    '    var d=document.createElement("div");',
+    '    d.id="mcjs-unlock-overlay";',
+    '    d.setAttribute("role","button");',
+    '    d.setAttribute("aria-label","点击进入游戏");',
+    '    var tEl=document.createElement("div");tEl.className="uc-title";tEl.textContent="点击进入游戏";d.appendChild(tEl);',
+    '    var sEl=document.createElement("div");sEl.className="uc-sub";sEl.textContent="浏览器要求一次真实点击才能解锁音频并显示主菜单";d.appendChild(sEl);',
+    '    var bEl=document.createElement("button");bEl.className="uc-btn";bEl.type="button";bEl.textContent="开始游戏";d.appendChild(bEl);',
+    '    var hEl=document.createElement("div");hEl.className="uc-hint";hEl.textContent="（或按键盘任意键）";d.appendChild(hEl);',
+    '    (document.body||document.documentElement).appendChild(d);',
+    '    overlayEl=d;',
+    '  }',
+    '  function disposeOverlay(){',
+    '    if(!overlayEl)return;',
+    '    overlayEl.classList.add("mcjs-fade");',
+    '    var node=overlayEl;overlayEl=null;',
+    '    setTimeout(function(){if(node&&node.parentNode)node.parentNode.removeChild(node);},280);',
+    '  }',
+    '  /* CRITICAL: only count isTrusted=true events.  Synthesised events are isTrusted=false and AudioContext.resume() rejects them.  We intentionally do NOT synthesise any event ourselves. */',
+    '  function onFirstGesture(e){',
+    '    if(!e||e.isTrusted!==true)return;',
+    '    document.removeEventListener("keydown",onFirstGesture,true);',
+    '    document.removeEventListener("pointerdown",onFirstGesture,true);',
+    '    document.removeEventListener("mousedown",onFirstGesture,true);',
+    '    document.removeEventListener("click",onFirstGesture,true);',
+    '    document.removeEventListener("touchstart",onFirstGesture,true);',
+    '    window.removeEventListener("keydown",onFirstGesture,true);',
+    '    window.removeEventListener("pointerdown",onFirstGesture,true);',
+    '    /* Best-effort: try to resume any AudioContext we can find. */',
+    '    try{',
+    '      var AC=window.AudioContext||window.webkitAudioContext;',
+    '      if(AC){',
+    '        var ctx=window.__MCJS_AUDIO_CTX__;',
+    '        if(!ctx){try{ctx=new AC();window.__MCJS_AUDIO_CTX__=ctx;}catch(_){}}',
+    '        if(ctx&&ctx.state==="suspended"){ctx.resume().catch(function(){});}',
+    '      }',
+    '    }catch(_){}',
+    '    disposeOverlay();',
+    '    /* Do NOT call stopPropagation / preventDefault - the same physical event must reach the Eaglercraft MainMenu underneath. */',
+    '  }',
+    '  function armGestureCapture(){',
+    '    document.addEventListener("keydown",onFirstGesture,true);',
+    '    document.addEventListener("pointerdown",onFirstGesture,true);',
+    '    document.addEventListener("mousedown",onFirstGesture,true);',
+    '    document.addEventListener("click",onFirstGesture,true);',
+    '    document.addEventListener("touchstart",onFirstGesture,true);',
+    '    window.addEventListener("keydown",onFirstGesture,true);',
+    '    window.addEventListener("pointerdown",onFirstGesture,true);',
+    '  }',
+    '  /* When the canvas mounts, show the unlock overlay. */',
+    '  var cvTries=0;var cvIv=setInterval(function(){',
+    '    cvTries++;',
+    '    try{',
+    '      var cv=document.querySelector("canvas");',
+    '      if(cv&&cv.width>0&&cv.height>0){',
+    '        clearInterval(cvIv);',
+    '        showUnlockOverlay();',
+    '        armGestureCapture();',
+    '      }',
+    '    }catch(e){}',
+    '    if(cvTries>240)clearInterval(cvIv);',
+    '  },250);',
+    '  /* Safety net: if the canvas never mounts within 60s, hide the small spinner so the protocol modal (if any) is reachable. */',
+    '  setTimeout(function(){if(!overlayShown)hideLoader();},60000);',
+    '})();'
+  ].join('');
+}
+
 function injectIntoHTML(html,scripts,baseURL){
   /* Build the injection.  CRITICAL: <base href> MUST come BEFORE any
    * <script src="..."> or other relative URL, because the browser uses
@@ -250,13 +456,22 @@ function injectIntoHTML(html,scripts,baseURL){
    *
    * Fix:
    *  - Inject the <base> as the very first element inside <head> so it
-   *    influences every subsequent relative-URL lookup. */
+   *    influences every subsequent relative-URL lookup.
+   *  - Also inject <style data-mcjs-host> (host CSS) and our auto-EULA
+   *    <script data-mcjs-host> so the user never sees a "black screen
+   *    waiting for protocol" state. */
   var baseTag=baseURL?'<base href="'+escapeAttr(baseURL)+'">':'';
+  var hostCSS='<style data-mcjs-host>'+buildHostCSS()+'</style>';
+  var hostJS='<script data-mcjs-host>'+buildHostJS()+'<\/script>';
   var scriptsTag='';
   for(var i=0;i<scripts.length;i++){
     scriptsTag+='<script>'+scripts[i]+'<\/script>';
   }
-  var injection=baseTag+scriptsTag;
+  /* Order matters: <base> first (so classes.js etc. resolve to the
+   * mirror), then host CSS (so the page never paints black), then the
+   * user-supplied scripts (JSPI, GPU probe, mem limit), then the host
+   * auto-EULA script (which is harmless if #protocolModal is absent). */
+  var injection=baseTag+hostCSS+hostJS+scriptsTag;
   /* Preserve the order: <base> → <head> → user scripts.
    * Match both <head> and <HEAD> (some mirrors vary). */
   if(html.indexOf('<head>')!==-1){
@@ -292,16 +507,23 @@ function cacheGameFiles(versionId,html,mirrorURL){
         size:html.length,
         url:mirrorURL,
         /* Bump this whenever the injection logic changes. Cached HTML
-         * with a lower version is automatically discarded on read. */
-        schema: 2
+         * with a lower version is automatically discarded on read.
+         *
+         * Schema 2: base-tag injection before parse + auto-protocol.
+         * Schema 3: also injects the full-screen "click to unlock"
+         *   overlay so Eaglercraft's AudioContext gets resumed by a
+         *   real (isTrusted) user gesture, instead of staying
+         *   suspended forever on synthesised events. */
+        schema: 3
       });
     });
 }
 
 function getCachedHTML(versionId){
   return dbGet(STORE_META,versionId).then(function(meta){
-    /* Reject outdated cached HTML (missing base tag → grey-screen bug). */
-    if(!meta||meta.schema!==2)return null;
+    /* Reject outdated cached HTML (missing base tag → grey-screen bug;
+     * missing unlock overlay → stuck on near-black MainMenu bug). */
+    if(!meta||meta.schema!==3)return null;
     return dbGet(STORE_GAME,'html:'+versionId);
   });
 }
@@ -483,7 +705,12 @@ function loadGameInFrame(version,html,mirrorURL,onProgress,onReady){
   iframe.id='gameFrame';
   /* allow attribute is set conditionally below for fullscreen / GPU */
   iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-pointer-lock allow-downloads');
-  iframe.style.cssText='width:100%;height:100%;border:none;background:#000;display:block;';
+  /* CRITICAL: do NOT use background:#000 here.  The game HTML itself has
+   * <html style="background-color:black"> which paints solid black while
+   * classes.js (~6-8 MB) is downloading, giving the user 8+ seconds of
+   * pure black before the protocol modal appears.  We use transparent
+   * and let the host CSS injected into the game HTML do the work. */
+  iframe.style.cssText='width:100%;height:100%;border:none;background:transparent;display:block;';
 
   var allowBits='autoplay; camera; microphone; gamepad; xr-spatial-tracking';
   if(window.MCJS_SETTINGS.gpuPrefer==='high-performance'){

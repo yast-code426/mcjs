@@ -24,8 +24,7 @@
     </div>
   </div>
 
-  <!-- Unsupported-OS gate (Linux / Chrome OS / BSD / unknown) -->
-  <!-- Shown via JS on first visit.  User must click "继续" to enter. -->
+  <!-- Unsupported-OS gate -->
   <div id="osGate" class="os-gate" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="osGateTitle">
     <div class="os-gate-backdrop"></div>
     <div class="os-gate-card">
@@ -77,8 +76,8 @@
             </svg>
           </div>
           <div class="logo-text">
-            <h1>MCJS Launcher</h1>
-            <span class="subtitle">Eaglercraft 全版本启动器</span>
+            <h1>MCJS</h1>
+            <span class="subtitle">/ MCJS.LINK</span>
           </div>
         </div>
         <div class="header-actions">
@@ -90,35 +89,41 @@
 
     <!-- Hero -->
     <section class="hero">
-      <h2 class="hero-title">Minecraft, In Your Browser.</h2>
+      <h1 class="hero-title">MCJS</h1>
       <p class="hero-subtitle">
-        本地运行 <span class="hl" id="heroVersionCount">18</span> 个真实可用的 Eaglercraft 网页版 Minecraft<br>
-        无需跳转，游戏直接在页面内启动
+        <a href="https://mcjs.cc/" target="_blank" rel="noopener">MCJS.CC</a> / <a href="https://mcjs.link/" target="_blank" rel="noopener">MCJS.LINK</a>
+      </p>
+      <h2 class="hero-headline">无需下载, 直接在浏览器里玩 MC !</h2>
+      <p class="hero-subhead">
+        Eaglercraft 最佳简体中文翻译版<br>
+        Eaglercraft 所有版本最全整合网站
+      </p>
+      <p class="hero-tags">
+        <span>免费</span><i>|</i>
+        <span>无广告</span><i>|</i>
+        <span>全设备支持</span><i>|</i>
+        <span>多版本</span><i>|</i>
+        <span>中文优化</span>
+      </p>
+      <p class="hero-tags" style="margin-top:4px;color:var(--text-muted);">
+        <span>材质包</span><i>|</i>
+        <span>光影包</span><i>|</i>
+        <span>模组整合包</span><i>|</i>
+        <span>免费远程联机服务</span>
       </p>
     </section>
 
     <!-- Main -->
     <main class="main">
-      <!-- Filter bar -->
+      <!-- Search bar (kept minimal) -->
       <div class="filter-bar">
-        <div class="filter-tabs">
-          <button class="filter-tab active" data-filter="all">全部</button>
-          <button class="filter-tab" data-filter="recommended">推荐</button>
-          <button class="filter-tab" data-filter="stable">稳定版</button>
-          <button class="filter-tab" data-filter="beta">测试版</button>
-          <button class="filter-tab" data-filter="new-beta">新版测试</button>
-          <button class="filter-tab" data-filter="legacy">经典版</button>
-          <button class="filter-tab" data-filter="wasm">WASM</button>
-          <button class="filter-tab" data-filter="online">🌐 可联机</button>
-  <button class="filter-tab" data-filter="modpack">📦 整合包</button>
-        </div>
         <div class="search-box">
           <input type="text" id="searchInput" placeholder="搜索版本...">
         </div>
       </div>
 
-      <!-- Version grid -->
-      <div class="version-grid" id="versionGrid"></div>
+      <!-- Version grid (rendered by app.js, grouped like mcjs.cc) -->
+      <div class="version-sections" id="versionSections"></div>
 
       <!-- FAQ -->
       <section class="faq-section">
@@ -170,7 +175,7 @@
     </div>
   </div>
 
-  <!-- Launch Failed Dialog (shown when all mirrors fail) -->
+  <!-- Launch Failed Dialog -->
   <div class="modal-overlay" id="launchFailedModal">
     <div class="modal" style="max-width:520px;">
       <div class="modal-header">
@@ -199,7 +204,6 @@
         <button class="settings-close" id="settingsClose">&times;</button>
       </div>
       <div class="settings-body">
-        <!-- Launch -->
         <div class="settings-group">
           <div class="settings-group-title">启动</div>
           <div class="setting-item">
@@ -228,7 +232,6 @@
           </div>
         </div>
 
-        <!-- Performance -->
         <div class="settings-group">
           <div class="settings-group-title">性能</div>
           <div class="setting-item">
@@ -267,7 +270,6 @@
           </div>
         </div>
 
-        <!-- Storage -->
         <div class="settings-group">
           <div class="settings-group-title">存储</div>
           <div class="setting-item">
@@ -300,7 +302,6 @@
           <button class="action-btn" id="resetOsGateBtn" style="margin-top:6px;">重新显示 OS 兼容性提示</button>
         </div>
 
-        <!-- Appearance -->
         <div class="settings-group">
           <div class="settings-group-title">外观</div>
           <div class="setting-item">
@@ -326,33 +327,21 @@
     </div>
   </div>
 
-  <!-- Game Overlay -->
+  <!-- Game Overlay (full-screen play area) -->
   <div class="game-overlay" id="gameOverlay">
-    <div class="game-toolbar" id="gameToolbar">
-      <div class="game-toolbar-left">
-        <div class="game-toolbar-dot"></div>
-        <span class="game-toolbar-title" id="gameTitle">游戏运行中</span>
-      </div>
-      <div class="game-toolbar-right">
-        <button class="toolbar-btn" id="gameFullscreenBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-          全屏
-        </button>
-        <button class="toolbar-btn danger" id="gameCloseBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          关闭
-        </button>
+    <div class="game-toolbar" id="gameToolbar" style="display:none;">
+      <div class="game-title" id="gameTitle">游戏</div>
+      <div class="game-actions">
+        <button class="game-action-btn" id="gameFullscreenBtn" title="全屏" aria-label="全屏">⛶</button>
+        <button class="game-action-btn" id="gameCloseBtn" title="关闭" aria-label="关闭">×</button>
       </div>
     </div>
-    <div class="game-container" id="gameContainer">
-      <div class="launch-content" id="launchContent">
-        <div class="launch-spinner"></div>
-        <p class="launch-text" id="launchText">正在准备启动...</p>
-        <div class="launch-progress-bar">
-          <div class="launch-progress-fill" id="launchProgress"></div>
-        </div>
-        <p class="launch-detail" id="launchDetail"></p>
-      </div>
+    <div class="game-container" id="gameContainer"></div>
+    <div class="game-launch-content" id="launchContent">
+      <div class="launch-spinner" aria-hidden="true"></div>
+      <div class="launch-text" id="launchText">正在准备启动...</div>
+      <div class="launch-detail" id="launchDetail">选择镜像或直接启动</div>
+      <div class="launch-progress"><div class="launch-progress-bar" id="launchProgress"></div></div>
     </div>
   </div>
 

@@ -11,9 +11,8 @@
 (function(){'use strict';
 
 /* ========== DOM References ========== */
-var grid=document.getElementById('versionGrid');
+var grid=document.getElementById('versionSections');
 var searchInput=document.getElementById('searchInput');
-var filterTabs=document.querySelectorAll('.filter-tab');
 var launchModal=document.getElementById('launchModal');
 var settingsModal=document.getElementById('settingsModal');
 var gameOverlay=document.getElementById('gameOverlay');
@@ -25,25 +24,38 @@ var launchProgress=document.getElementById('launchProgress');
 var launchContent=document.getElementById('launchContent');
 
 /* ========== State ========== */
-var currentFilter='all';
 var searchQuery='';
 var searchDebounceTimer=null;
 var settings=window.MCJS_SETTINGS||{};
 var sound=null; /* Lazy-initialized SoundManager */
 
-/* ========== Feature Labels ========== */
-var FEATURE_LABELS={
-  '多人联机':{icon:'N',text:'多人联机'},
-  '触屏支持':{icon:'T',text:'触屏支持'},
-  '光影渲染':{icon:'S',text:'光影渲染'},
-  '高帧率':{icon:'F',text:'高帧率'},
-  '单人游戏':{icon:'P',text:'单人游戏'},
-  '导出存档':{icon:'E',text:'导出存档'},
-  '单机':{icon:'P',text:'单机'},
-  '局域网':{icon:'L',text:'局域网'},
-  '远程联机':{icon:'R',text:'远程联机'},
-  '模组支持':{icon:'M',text:'模组支持'}
-};
+/* ========== Group Definitions (mcjs.cc style) ========== */
+var GROUPS=[
+  {
+    id:'mcjs',
+    title:'MCJS 优化 Eaglercraft 客户端 (推荐)',
+    desc:'MCJS 专为简体中文用户优化的 Eaglercraft 中文版。1.8.8 已支持远程联机，此处全版本已支持中文语言。',
+    typeMatch:function(ver){return ver.type==='recommended';}
+  },
+  {
+    id:'modpack',
+    title:'模组整合包 Eaglercraft 客户端',
+    desc:'1.6.4 Forge 版本，内置近百种热门模组，超越原版体验。模组整合包对设备性能要求高，仅 WASM 版。这些版本不支持中文语言，强制切换语言会导致游戏崩溃。',
+    typeMatch:function(ver){return ver.modpack===true;}
+  },
+  {
+    id:'newbeta',
+    title:'最新测试版 Eaglercraft 客户端',
+    desc:'提前体验最新版本。测试版不稳定且 bug 多，仅测试体验。高版本对设备性能要求高，仅 WASM 版，需高性能电脑。注意：这些版本不支持中文语言，强制切换语言会导致游戏崩溃。',
+    typeMatch:function(ver){return !ver.modpack&&(ver.type==='beta'||ver.type==='new-beta');}
+  },
+  {
+    id:'legacy',
+    title:'旧版 Eaglercraft 客户端',
+    desc:'早期版本原版搬运，只有英文版，无中文版，仅怀旧体验。',
+    typeMatch:function(ver){return ver.type==='legacy';}
+  }
+];
 
 var BADGE_MAP={
   'recommended':{cls:'badge-recommended',text:'推荐'},
@@ -152,89 +164,64 @@ function escapeHtml(str){
 
 function renderCard(ver){
   var badge=BADGE_MAP[ver.type]||BADGE_MAP.legacy;
-
-  var tags=ver.features.map(function(f){
-    var label=FEATURE_LABELS[f]||{icon:'?',text:f};
-    return '<span class="tag"><span class="tag-icon">'+label.icon+'</span>'+label.text+'</span>';
-  }).join('');
-
-  if(ver.multiplayer){
-    tags += '<span class="tag tag-online">🌐 可联机</span>';
-  }
-  if(ver.modpack){
-    tags += '<span class="tag tag-modpack">📦 整合包</span>';
-  }
-
-  var langTags=ver.lang.map(function(l){
-    return '<span class="tag lang-tag">'+escapeHtml(l)+'</span>';
-  }).join('');
+  var extra=ver.recommendTag?(' <span class="card-recommend-tag">'+escapeHtml(ver.recommendTag)+'</span>'):'';
 
   var detailLines=ver.detail?ver.detail.split('\n').map(function(line){
     return line.trim()?'<div class="card-detail-line">'+escapeHtml(line)+'</div>':'';
   }).join(''):'';
 
   return '<div class="version-card" data-type="'+ver.type+'" data-id="'+ver.id+'" data-engine="'+ver.engine+'">'+
-    '<div class="card-header">'+
-      '<div class="card-title">'+escapeHtml(ver.name)+'</div>'+
-      '<span class="card-badge '+badge.cls+'">'+badge.text+'</span>'+
+    '<div class="card-badges">'+
+      '<span class="card-badge '+badge.cls+'">'+badge.text+'</span>'+extra+
     '</div>'+
-    '<div class="card-meta">'+escapeHtml(ver.version)+'<br>作者：'+escapeHtml(ver.author)+'</div>'+
+    '<div class="card-title">'+escapeHtml(ver.name)+'</div>'+
+    '<div class="card-meta">'+escapeHtml(ver.version)+'</div>'+
+    '<div class="card-meta card-author">原作者: '+escapeHtml(ver.author)+'</div>'+
     '<div class="card-detail">'+detailLines+'</div>'+
-    '<div class="card-tags">'+tags+langTags+
-      '<span class="tag engine-tag">'+ver.engine+'</span>'+
-    '</div>'+
     '<div class="card-footer">'+
       '<span class="card-size">'+ver.size+'</span>'+
-      '<button class="card-launch-btn" data-id="'+ver.id+'" aria-label="启动 '+escapeHtml(ver.name)+'">启动</button>'+
+      '<button class="card-launch-btn" data-id="'+ver.id+'" aria-label="启动 '+escapeHtml(ver.name)+'">开始游戏</button>'+
     '</div>'+
   '</div>';
 }
 
-function renderGrid(){
-  var filtered=VERSIONS.filter(function(ver){
-    if(currentFilter!=='all'){
-      if(currentFilter==='wasm'){
-        if(ver.engine!=='WASM')return false;
-      }else if(currentFilter==='stable'){
-        if(ver.type!=='recommended')return false;
-      }else if(currentFilter==='online'){
-        if(!ver.multiplayer)return false;
-      }else if(currentFilter==='modpack'){
-        if(!ver.modpack)return false;
-      }else{
-        if(ver.type!==currentFilter)return false;
-      }
-    }
-    if(searchQuery){
-      var q=searchQuery.toLowerCase();
-      if(ver.name.toLowerCase().indexOf(q)===-1&&
-         ver.version.toLowerCase().indexOf(q)===-1&&
-         ver.author.toLowerCase().indexOf(q)===-1&&
-         ver.engine.toLowerCase().indexOf(q)===-1){
-        return false;
-      }
-    }
-    return true;
-  });
-
-  if(filtered.length===0){
-    grid.innerHTML='<div class="empty-state"><p>没有找到匹配的版本</p><p style="font-size:0.78rem;margin-top:6px;opacity:0.7;">试试其他筛选条件</p></div>';
-  }else{
-    grid.innerHTML=filtered.map(renderCard).join('');
-  }
+function matchSearch(ver,q){
+  if(!q)return true;
+  if(ver.name.toLowerCase().indexOf(q)!==-1)return true;
+  if(ver.version.toLowerCase().indexOf(q)!==-1)return true;
+  if(ver.author&&ver.author.toLowerCase().indexOf(q)!==-1)return true;
+  if(ver.engine&&ver.engine.toLowerCase().indexOf(q)!==-1)return true;
+  return false;
 }
 
-/* ========== Filter & Search (with debounce) ========== */
-filterTabs.forEach(function(tab){
-  tab.addEventListener('click',function(){
-    if(sound)sound.click();
-    filterTabs.forEach(function(t){t.classList.remove('active');});
-    tab.classList.add('active');
-    currentFilter=tab.getAttribute('data-filter');
-    renderGrid();
-  });
-});
+function renderGrid(){
+  var q=searchQuery.toLowerCase();
+  var html='';
+  var totalShown=0;
 
+  GROUPS.forEach(function(group){
+    var matched=VERSIONS.filter(function(ver){
+      if(!group.typeMatch(ver))return false;
+      return matchSearch(ver,q);
+    });
+    if(matched.length===0)return;
+    totalShown+=matched.length;
+    html+='<section class="version-group" data-group="'+group.id+'">'+
+      '<header class="group-header">'+
+        '<h3 class="group-title">'+escapeHtml(group.title)+'</h3>'+
+        '<p class="group-desc">'+escapeHtml(group.desc)+'</p>'+
+      '</header>'+
+      '<div class="version-grid">'+matched.map(renderCard).join('')+'</div>'+
+    '</section>';
+  });
+
+  if(totalShown===0){
+    html='<div class="empty-state"><p>没有找到匹配的版本</p><p style="font-size:0.78rem;margin-top:6px;opacity:0.7;">试试其他搜索关键字</p></div>';
+  }
+  grid.innerHTML=html;
+}
+
+/* ========== Search (with debounce) ========== */
 searchInput.addEventListener('input',function(){
   if(searchDebounceTimer)clearTimeout(searchDebounceTimer);
   searchDebounceTimer=setTimeout(function(){
