@@ -1,85 +1,69 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-  <title>MCJS Launcher - Eaglercraft 全版本启动器</title>
-  <meta name="description" content="MCJS 镜像站启动器 - 全版本网页版 Minecraft，本地运行，无需跳转">
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-  <meta name="theme-color" content="#f0f2f5">
-  <style>
-    .version-grid { gap: var(--card-gap, 14px); }
-    .version-card { padding: var(--card-padding, 18px 20px 14px); }
-    body.no-anim *, body.no-anim *::before, body.no-anim *::after {
-      animation-duration: 0s !important;
-      transition-duration: 0s !important;
-    }
-    body.density-compact .group-header { margin-bottom: 8px; }
-    body.density-compact .version-sections { gap: 20px; }
-    body.density-spacious .group-header { margin-bottom: 18px; }
-    body.density-spacious .version-sections { gap: 40px; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
+  <title>MCJS Launcher — Eaglercraft 全版本启动器</title>
+  <meta name="description" content="MCJS 镜像站启动器 · 全版本网页版 Minecraft，本地运行，无需跳转" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <meta name="theme-color" content="#f0f2f5" />
 </head>
 <body>
-  <!-- Background layers -->
+  <!-- 背景层 -->
   <div class="bg-layer bg-image"></div>
   <div class="bg-layer bg-overlay"></div>
   <div class="bg-layer bg-grid"></div>
 
-  <!-- Compatibility notice -->
+  <!-- WASM 兼容性提示 -->
   <div id="wasmWarning" class="wasm-warning" style="display:none" role="alert">
     <div class="wasm-warning-content">
-      <strong>兼容模式</strong>
-      <span id="wasmWarningText">您的浏览器不支持 WebAssembly，启动游戏时将自动使用兼容模式（可能性能较差）</span>
+      <strong>兼容性回退模式</strong>
+      <span id="wasmWarningText">您的浏览器不支持 WebAssembly，启动时将自动使用兼容模式（性能可能下降）</span>
       <button class="wasm-warning-close" id="wasmWarningClose" aria-label="关闭">&times;</button>
     </div>
   </div>
 
-  <!-- Unsupported-OS gate -->
-  <div id="osGate" class="os-gate" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="osGateTitle">
+  <!-- OS 兼容性检测 -->
+  <div id="osGate" class="os-gate" style="display:none" role="alertdialog" aria-modal="true">
     <div class="os-gate-backdrop"></div>
     <div class="os-gate-card">
-      <div class="os-gate-icon" aria-hidden="true">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-          <line x1="12" y1="9" x2="12" y2="13"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
+      <div class="os-gate-icon">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
       </div>
-      <h2 class="os-gate-title" id="osGateTitle">系统兼容性提示</h2>
+      <h2 class="os-gate-title">系统兼容性提示</h2>
       <p class="os-gate-os" id="osGateOs">检测到您的操作系统：未知</p>
-      <p class="os-gate-msg">
-        您的系统<strong>并不被官方支持</strong>，可能会遇到以下问题：
-      </p>
+      <p class="os-gate-msg">您的系统<strong>并未得到官方支持</strong>，可能会遇到以下问题：</p>
       <ul class="os-gate-list">
-        <li>游戏可能无法启动、闪退或卡死</li>
-        <li>WASM 版本性能可能极低，将使用 JS 兼容模式</li>
-        <li>存档、联机等部分功能可能异常</li>
-        <li>官方仅测试 Windows / macOS / Android / iOS 平台</li>
+        <li>游戏可能无法启动、闪退或失去响应</li>
+        <li>WASM 版本性能可能显著降低，将启用 JS 兼容模式</li>
+        <li>存档、多人联机等功能可能部分失效</li>
+        <li>官方仅对 Windows / macOS / Android / iOS 平台进行测试</li>
       </ul>
       <p class="os-gate-ask">是否仍要继续访问？</p>
       <div class="os-gate-actions">
         <button class="os-gate-btn os-gate-btn-secondary" id="osGateLeave" type="button">放弃访问</button>
         <button class="os-gate-btn os-gate-btn-primary" id="osGateContinue" type="button">仍然继续</button>
       </div>
-      <p class="os-gate-hint">提示：在设置中可以重置此提示</p>
+      <p class="os-gate-hint">提示：您可以在设置中重置此提示</p>
     </div>
   </div>
 
   <noscript>
-    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f0f2f5;color:#1a1d26;font-family:sans-serif;padding:20px;text-align:center;z-index:9999;">
-      请启用 JavaScript 以使用 MCJS Launcher。
-    </div>
+    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f0f2f5;color:#1a1d26;font-family:sans-serif;padding:20px;text-align:center;z-index:9999;">请启用 JavaScript 以使用 MCJS Launcher。</div>
   </noscript>
 
   <div id="app">
-    <!-- Header -->
+    <!-- 顶栏 -->
     <header class="header">
       <div class="header-inner">
         <div class="logo">
           <div class="logo-icon">
-            <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
+            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
               <rect x="2" y="2" width="28" height="28" rx="4" fill="#fff" opacity="0.9"/>
               <rect x="8" y="8" width="6" height="6" fill="#22c55e"/>
               <rect x="18" y="8" width="6" height="6" fill="#22c55e"/>
@@ -92,117 +76,119 @@
           </div>
         </div>
         <div class="header-actions">
-          <span class="stat-badge" id="versionCount">18 个真实版本</span>
-          <button class="settings-btn" id="settingsBtn" title="设置 (Ctrl+,)" aria-label="设置">&#9881;</button>
+          <button class="settings-btn" id="settingsBtn" title="设置 (Ctrl+,)" aria-label="设置">⚙</button>
         </div>
       </div>
     </header>
 
-    <!-- Hero -->
+    <!-- Hero + 搜索框 -->
     <section class="hero">
-      <h1 class="hero-title">MCJS Launcher</h1>
-      <p class="hero-subtitle">Eaglercraft 全版本启动器 · 网页版 Minecraft 镜像</p>
-      <h2 class="hero-headline">无需下载, 直接在浏览器里玩 MC !</h2>
-      <p class="hero-subhead">
-        Eaglercraft 最佳简体中文翻译版<br>
-        Eaglercraft 所有版本最全整合网站
-      </p>
-      <p class="hero-tags">
-        <span>免费</span><i>|</i>
-        <span>无广告</span><i>|</i>
-        <span>全设备支持</span><i>|</i>
-        <span>多版本</span><i>|</i>
-        <span>中文优化</span>
-      </p>
-      <p class="hero-tags hero-tags-muted">
-        <span>材质包</span><i>|</i>
-        <span>光影包</span><i>|</i>
-        <span>模组整合包</span><i>|</i>
-        <span>免费远程联机服务</span>
-      </p>
-    </section>
-
-    <!-- Main -->
-    <main class="main">
-      <div class="filter-bar">
+      <div class="hero-left">
+        <h1 class="hero-title">MCJS Launcher</h1>
+        <p class="hero-subtitle">Eaglercraft 全版本启动器 · 网页版 Minecraft 镜像</p>
+        <h2 class="hero-headline">无需下载，直接在浏览器中畅玩 Minecraft</h2>
+        <p class="hero-subhead">Eaglercraft 简体中文优化版本<br />最全面的 Eaglercraft 版本整合平台</p>
+        <p class="hero-tags">
+          <span>完全免费</span><i>|</i><span>无广告干扰</span><i>|</i>
+          <span>全平台兼容</span><i>|</i><span>多版本支持</span><i>|</i><span>中文语言优化</span>
+        </p>
+        <p class="hero-tags hero-tags-muted">
+          <span>材质包</span><i>|</i><span>光影包</span><i>|</i>
+          <span>模组整合</span><i>|</i><span>免费远程联机</span>
+        </p>
+      </div>
+      <div class="hero-right">
         <div class="search-box">
-          <input type="text" id="searchInput" placeholder="搜索版本...">
+          <input type="text" id="searchInput" placeholder="搜索版本…" />
         </div>
       </div>
+    </section>
 
+    <!-- 主内容 -->
+    <main class="main">
       <div class="version-sections" id="versionSections"></div>
 
       <!-- FAQ -->
       <section class="faq-section">
         <h2>常见问题</h2>
         <div class="faq-item">
-          <div class="q">游戏打不开 / 卡死 / 崩溃怎么办？</div>
-          <div class="a">请使用最新版 <span class="hl">Google Chrome</span> 浏览器。推荐使用 WASM 版本（性能最佳）。设备建议使用性能较好的电脑。本站已内置 JSPI 兼容处理，大部分浏览器均可正常启动。</div>
+          <div class="q">游戏打不开、卡死或崩溃怎么办？</div>
+          <div class="a">请使用最新版 <span class="hl">Google Chrome</span> 浏览器。推荐使用 WASM 版本以获得最佳性能。设备建议使用性能较好的电脑。本站已内置 JSPI 兼容处理，大部分现代浏览器均可正常运行。</div>
         </div>
         <div class="faq-item">
-          <div class="q">游戏存档会消失吗？</div>
-          <div class="a">本站使用 <span class="hl">IndexedDB 隔离存档</span>，每个版本的存档独立存储。但受浏览器缓存限制，存档可能被自动清除。<span class="hl">建议定期备份存档</span>。</div>
+          <div class="q">游戏存档会丢失吗？</div>
+          <div class="a">本站使用 <span class="hl">IndexedDB 隔离存储</span>，每个版本的存档独立保存。但由于浏览器缓存限制，存档可能被自动清理。<span class="hl">建议定期手动备份存档</span>。</div>
         </div>
         <div class="faq-item">
-          <div class="q">多人游戏怎么联机？</div>
+          <div class="q">多人游戏如何联机？</div>
           <div class="a">
-            <span class="hl">单机</span>：单人游玩，无需网络。<br>
-            <span class="hl">局域网联机</span>：同一网络下，房主开启"共享世界"，其他设备在"多人游戏"中自动发现房间。<br>
-            <span class="hl">远程联机</span>：房主开启"共享世界"生成邀请码，其他设备输入邀请码直连。
+            <span class="hl">单机模式</span>：单人游玩，无需网络连接。<br />
+            <span class="hl">局域网联机</span>：同一网络下，房主开启"共享世界"，其他设备在"多人游戏"中自动发现房间。<br />
+            <span class="hl">远程联机</span>：房主开启"共享世界"生成邀请码，其他设备输入邀请码即可直连。
           </div>
         </div>
         <div class="faq-item">
-          <div class="q">手机 / 平板能玩吗？</div>
-          <div class="a"><span class="hl">仅 1.8.8 版本</span> 支持移动触屏设备。其他版本仅支持电脑端。</div>
+          <div class="q">手机或平板能玩吗？</div>
+          <div class="a"><span class="hl">仅 1.8.8 版本</span> 支持移动触屏设备。其他版本仅支持电脑端操作。</div>
         </div>
         <div class="faq-item">
           <div class="q">新版本（1.16.5 / 1.21.11 / 26.1.2）稳定吗？</div>
-          <div class="a">这些是 <span class="warn">非常早期的测试版</span>，不稳定且 bug 多。高版本对设备性能要求极高，<span class="warn">仅 WASM 版本可用</span>，需高性能电脑。</div>
+          <div class="a">这些是 <span class="warn">非常早期的测试版本</span>，稳定性不足且存在较多缺陷。高版本对设备性能要求较高，<span class="warn">仅 WASM 版本可用</span>，建议在高性能设备上运行。</div>
         </div>
       </section>
     </main>
 
-    <!-- Footer -->
     <footer class="footer">
       <p>MCJS Launcher 是基于 Eaglercraft 的社区启动器</p>
-      <p>游戏文件来自公共 CDN 镜像，与 Minecraft、Mojang 无从属关系</p>
+      <p>游戏文件来源于公共 CDN 镜像，与 Minecraft、Mojang 无任何从属关系</p>
     </footer>
   </div>
 
-  <!-- Launch Modal -->
+  <!-- 镜像选择弹窗 -->
   <div class="modal-overlay" id="launchModal">
-    <div class="modal">
+    <div class="modal modal-download">
       <div class="modal-header">
-        <h2 id="modalTitle">选择启动方式</h2>
+        <h2 id="modalTitle">选择启动镜像</h2>
         <button class="modal-close" id="modalClose" aria-label="关闭">&times;</button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body" id="modalBody">
         <div id="mirrorList"></div>
+        <div id="downloadProgressArea" style="display:none; margin-top:16px;">
+          <div class="download-progress-wrap">
+            <div class="download-progress-bar" id="downloadProgressBar" style="width:0%"></div>
+          </div>
+          <div class="download-stats">
+            <span id="downloadStatusText">正在下载…</span>
+            <span id="downloadSpeedText">0 KB/s</span>
+            <span id="downloadEtaText">--</span>
+          </div>
+          <button class="download-cancel-btn" id="downloadCancelBtn">取消下载</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Launch Failed Dialog -->
+  <!-- 启动失败弹窗 -->
   <div class="modal-overlay" id="launchFailedModal">
     <div class="modal" style="max-width:520px;">
       <div class="modal-header">
-        <h2>无法启动游戏</h2>
+        <h2>启动失败</h2>
         <button class="modal-close" id="launchFailedClose" aria-label="关闭">&times;</button>
       </div>
       <div class="modal-body">
         <p id="launchFailedMsg" style="margin-bottom:12px;font-size:0.88rem;color:var(--text-secondary);line-height:1.6;"></p>
-        <p style="margin-bottom:8px;font-size:0.8rem;color:var(--text-muted);">您可以手动访问以下链接:</p>
-        <input type="text" id="launchFailedUrl" readonly style="width:100%;padding:8px 12px;border:1px solid var(--border-base);border-radius:8px;font-family:var(--font-mono);font-size:0.78rem;background:var(--bg-detail);color:var(--text-primary);">
+        <p style="margin-bottom:8px;font-size:0.8rem;color:var(--text-muted);">您可以手动访问以下链接：</p>
+        <input type="text" id="launchFailedUrl" readonly style="width:100%;padding:8px 12px;border:1px solid var(--border-base);border-radius:8px;font-family:var(--font-mono);font-size:0.78rem;background:var(--bg-detail);color:var(--text-primary);" />
         <div style="display:flex;gap:8px;margin-top:12px;">
           <button class="card-launch-btn" id="launchFailedCopy" style="flex:1;">复制链接</button>
-          <button class="card-launch-btn" id="launchFailedOpen" style="flex:1;background:var(--accent-blue);box-shadow:0 2px 8px rgba(59,130,246,0.25);">在新标签页打开</button>
+          <button class="card-launch-btn" id="launchFailedOpen" style="flex:1;background:var(--accent-blue);box-shadow:0 2px 8px rgba(59,130,246,0.25);">在新标签页中打开</button>
         </div>
-        <button class="action-btn" id="launchFailedRetry" style="margin-top:14px;">重试 (回到镜像选择)</button>
+        <button class="action-btn" id="launchFailedRetry" style="margin-top:14px;">重试（返回镜像选择）</button>
       </div>
     </div>
   </div>
 
-  <!-- Settings Panel -->
+  <!-- 设置面板 -->
   <div class="settings-overlay" id="settingsModal">
     <div class="settings-backdrop"></div>
     <div class="settings-panel">
@@ -211,14 +197,10 @@
         <button class="settings-close" id="settingsClose">&times;</button>
       </div>
       <div class="settings-body">
-        <!-- 启动设置 -->
         <div class="settings-group">
           <div class="settings-group-title">启动</div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>默认镜像</span>
-              <small>选择首选的游戏文件源</small>
-            </div>
+            <div class="setting-label"><span>默认镜像</span><small>选择首选的游戏文件源</small></div>
             <div class="setting-control">
               <select class="setting-select" id="settingMirror">
                 <option value="0">主站 (pages.dev)</option>
@@ -231,63 +213,36 @@
             </div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>全屏启动</span>
-              <small>启动游戏后自动进入全屏</small>
-            </div>
-            <div class="setting-control">
-              <button class="toggle" id="settingFullscreen" type="button" role="switch" aria-checked="false"></button>
-            </div>
+            <div class="setting-label"><span>全屏启动</span><small>启动游戏后自动进入全屏模式</small></div>
+            <div class="setting-control"><button class="toggle" id="settingFullscreen" type="button" role="switch" aria-checked="false"></button></div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>快速启动</span>
-              <small>跳过镜像选择直接启动</small>
-            </div>
-            <div class="setting-control">
-              <button class="toggle" id="settingQuickLaunch" type="button" role="switch" aria-checked="false"></button>
-            </div>
+            <div class="setting-label"><span>快速启动</span><small>跳过镜像选择直接启动</small></div>
+            <div class="setting-control"><button class="toggle" id="settingQuickLaunch" type="button" role="switch" aria-checked="false"></button></div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>加载详情</span>
-              <small>显示详细的加载步骤信息</small>
-            </div>
-            <div class="setting-control">
-              <button class="toggle active" id="settingLoadingDetail" type="button" role="switch" aria-checked="true"></button>
-            </div>
+            <div class="setting-label"><span>加载详情</span><small>显示详细的加载步骤信息</small></div>
+            <div class="setting-control"><button class="toggle active" id="settingLoadingDetail" type="button" role="switch" aria-checked="true"></button></div>
           </div>
         </div>
 
-        <!-- 性能设置 -->
         <div class="settings-group">
           <div class="settings-group-title">性能</div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>内存分配上限</span>
-              <small>游戏可使用的最大内存</small>
-            </div>
+            <div class="setting-label"><span>内存分配上限</span><small>游戏可使用的最大内存</small></div>
             <div class="setting-control">
               <div class="setting-slider">
-                <input type="range" id="settingMemory" min="256" max="4096" step="128" value="512">
+                <input type="range" id="settingMemory" min="256" max="4096" step="128" value="512" />
                 <span class="slider-value" id="memoryValue">512 MB</span>
               </div>
             </div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>启动前内存优化</span>
-              <small>启动游戏前自动清理内存</small>
-            </div>
-            <div class="setting-control">
-              <button class="toggle active" id="settingAutoClean" type="button"></button>
-            </div>
+            <div class="setting-label"><span>启动前内存优化</span><small>启动游戏前自动清理内存</small></div>
+            <div class="setting-control"><button class="toggle active" id="settingAutoClean" type="button"></button></div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>GPU 偏好</span>
-              <small>选择图形处理器模式</small>
-            </div>
+            <div class="setting-label"><span>GPU 偏好</span><small>选择图形处理器模式</small></div>
             <div class="setting-control">
               <select class="setting-select" id="settingGPU">
                 <option value="high-performance">高性能独立显卡</option>
@@ -298,65 +253,42 @@
           </div>
         </div>
 
-        <!-- 存储设置 -->
         <div class="settings-group">
           <div class="settings-group-title">存储</div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>存档隔离</span>
-              <small>每个版本使用独立存档空间</small>
-            </div>
-            <div class="setting-control">
-              <button class="toggle active" id="settingSaveIsolation" type="button" role="switch" aria-checked="true"></button>
-            </div>
+            <div class="setting-label"><span>存档隔离</span><small>每个版本使用独立的存档空间</small></div>
+            <div class="setting-control"><button class="toggle active" id="settingSaveIsolation" type="button" role="switch" aria-checked="true"></button></div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>缓存上限</span>
-              <small>游戏文件本地缓存大小限制</small>
-            </div>
+            <div class="setting-label"><span>缓存上限</span><small>游戏文件本地缓存大小限制</small></div>
             <div class="setting-control">
               <div class="setting-slider">
-                <input type="range" id="settingCacheLimit" min="512" max="8192" step="256" value="2048">
+                <input type="range" id="settingCacheLimit" min="512" max="8192" step="256" value="2048" />
                 <span class="slider-value" id="cacheValue">2048 MB</span>
               </div>
             </div>
           </div>
           <div class="cache-info">
-            <div class="cache-info-row"><span>已用缓存</span><strong id="cacheSizeText">计算中...</strong></div>
+            <div class="cache-info-row"><span>已用缓存</span><strong id="cacheSizeText">计算中…</strong></div>
             <div class="cache-info-row"><span>缓存文件</span><strong id="cacheFileCount"></strong></div>
           </div>
           <button class="action-btn" id="clearCacheBtn">清除游戏缓存</button>
           <button class="action-btn danger" id="clearSaveBtn" style="margin-top:6px;">清除所有存档</button>
-          <button class="action-btn" id="resetOsGateBtn" style="margin-top:6px;">重新显示 OS 兼容性提示</button>
+          <button class="action-btn" id="resetOsGateBtn" style="margin-top:6px;">重置 OS 兼容性提示</button>
         </div>
 
-        <!-- 外观设置 -->
         <div class="settings-group">
           <div class="settings-group-title">外观</div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>背景图片</span>
-              <small>显示 Minecraft 风景背景</small>
-            </div>
-            <div class="setting-control">
-              <button class="toggle active" id="settingBgImage" type="button" role="switch" aria-checked="true"></button>
-            </div>
+            <div class="setting-label"><span>背景图片</span><small>显示 Minecraft 风景背景</small></div>
+            <div class="setting-control"><button class="toggle active" id="settingBgImage" type="button" role="switch" aria-checked="true"></button></div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>减少动态效果</span>
-              <small>关闭动画和过渡效果</small>
-            </div>
-            <div class="setting-control">
-              <button class="toggle" id="settingReduceMotion" type="button" role="switch" aria-checked="false"></button>
-            </div>
+            <div class="setting-label"><span>减少动态效果</span><small>关闭动画和过渡效果</small></div>
+            <div class="setting-control"><button class="toggle" id="settingReduceMotion" type="button" role="switch" aria-checked="false"></button></div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>字体大小</span>
-              <small>调整界面文字大小</small>
-            </div>
+            <div class="setting-label"><span>字体大小</span><small>调整界面文字大小</small></div>
             <div class="setting-control">
               <select class="setting-select" id="settingFontSize">
                 <option value="small">小</option>
@@ -367,10 +299,7 @@
             </div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>卡片密度</span>
-              <small>版本卡片的间距和大小</small>
-            </div>
+            <div class="setting-label"><span>卡片密度</span><small>版本卡片的间距和大小</small></div>
             <div class="setting-control">
               <select class="setting-select" id="settingCardDensity">
                 <option value="compact">紧凑</option>
@@ -381,51 +310,40 @@
           </div>
         </div>
 
-        <!-- 音效与辅助 -->
         <div class="settings-group">
           <div class="settings-group-title">音效与辅助</div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>音效</span>
-              <small>启动器界面音效</small>
-            </div>
-            <div class="setting-control">
-              <button class="toggle active" id="settingSound" type="button" role="switch" aria-checked="true"></button>
-            </div>
+            <div class="setting-label"><span>音效</span><small>启动器界面音效</small></div>
+            <div class="setting-control"><button class="toggle active" id="settingSound" type="button" role="switch" aria-checked="true"></button></div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>自动检查更新</span>
-              <small>启动时检查启动器更新</small>
-            </div>
-            <div class="setting-control">
-              <button class="toggle active" id="settingAutoUpdateCheck" type="button" role="switch" aria-checked="true"></button>
-            </div>
+            <div class="setting-label"><span>自动检查更新</span><small>启动时检查启动器更新</small></div>
+            <div class="setting-control"><button class="toggle active" id="settingAutoUpdateCheck" type="button" role="switch" aria-checked="true"></button></div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Game Overlay -->
+  <!-- 游戏容器（浅色毛玻璃） -->
   <div class="game-overlay" id="gameOverlay">
     <div class="game-toolbar" id="gameToolbar" style="display:none;">
       <div class="game-title" id="gameTitle">游戏</div>
       <div class="game-actions">
-        <button class="game-action-btn" id="gameFullscreenBtn" title="全屏" aria-label="全屏">&#9904;</button>
+        <button class="game-action-btn" id="gameFullscreenBtn" title="全屏" aria-label="全屏">⛶</button>
         <button class="game-action-btn" id="gameCloseBtn" title="关闭" aria-label="关闭">&times;</button>
       </div>
     </div>
     <div class="game-container" id="gameContainer"></div>
     <div class="game-launch-content" id="launchContent">
       <div class="launch-spinner" aria-hidden="true"></div>
-      <div class="launch-text" id="launchText">正在准备启动...</div>
-      <div class="launch-detail" id="launchDetail">选择镜像或直接启动</div>
+      <div class="launch-text" id="launchText">正在准备启动…</div>
+      <div class="launch-detail" id="launchDetail">请稍候…</div>
       <div class="launch-progress"><div class="launch-progress-bar" id="launchProgress"></div></div>
+      <button class="launch-cancel-btn" id="launchCancelBtn" style="margin-top:12px;">取消</button>
     </div>
   </div>
 
-  <!-- Scripts -->
   <script src="js/versions.js"></script>
   <script src="js/game.js"></script>
   <script src="js/app.js"></script>
