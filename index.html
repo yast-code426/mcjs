@@ -30,8 +30,8 @@
   <!-- Compatibility notice -->
   <div id="wasmWarning" class="wasm-warning" style="display:none" role="alert">
     <div class="wasm-warning-content">
-      <strong>提示</strong>
-      <span id="wasmWarningText">检测到您的浏览器可能不完全支持 WebAssembly。已为您自动回退到 JS 版本。</span>
+      <strong>兼容模式</strong>
+      <span id="wasmWarningText">您的浏览器不支持 WebAssembly，启动游戏时将自动使用兼容模式（可能性能较差）</span>
       <button class="wasm-warning-close" id="wasmWarningClose" aria-label="关闭">&times;</button>
     </div>
   </div>
@@ -54,7 +54,7 @@
       </p>
       <ul class="os-gate-list">
         <li>游戏可能无法启动、闪退或卡死</li>
-        <li>WASM 版本性能可能极低</li>
+        <li>WASM 版本性能可能极低，将使用 JS 兼容模式</li>
         <li>存档、联机等部分功能可能异常</li>
         <li>官方仅测试 Windows / macOS / Android / iOS 平台</li>
       </ul>

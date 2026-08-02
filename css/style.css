@@ -925,25 +925,31 @@ body.no-anim * { animation-duration: 0s !important; }
 .action-btn.danger { color: var(--accent-red); }
 .action-btn.danger:hover { background: var(--accent-red-bg); border-color: rgba(239,68,68,0.3); }
 
-/* ========== OS Gate ========== */
+/* ========== OS Gate (修复: 置顶) ========== */
 .os-gate {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  display: flex;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  pointer-events: auto !important;
 }
+
 .os-gate-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1;
 }
+
 .os-gate-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.60);
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border-radius: var(--radius);
@@ -952,9 +958,17 @@ body.no-anim * { animation-duration: 0s !important; }
   width: 100%;
   text-align: center;
   border: 1px solid var(--border-base);
-  box-shadow: var(--shadow-modal);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
 }
-.os-gate-icon { color: var(--accent-orange); margin-bottom: 14px; display: flex; justify-content: center; }
+
+.os-gate-icon {
+  color: var(--accent-orange);
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: center;
+}
+
 .os-gate-title {
   font-family: var(--font-display);
   font-size: 1.35rem;
@@ -962,8 +976,25 @@ body.no-anim * { animation-duration: 0s !important; }
   color: var(--text-primary);
   margin-bottom: 8px;
 }
-.os-gate-os { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 14px; font-family: var(--font-mono); }
-.os-gate-msg { font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 12px; }
+
+.os-gate-os {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  font-family: var(--font-mono);
+}
+
+.os-gate-msg {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.os-gate-msg strong {
+  color: var(--accent-orange);
+  font-weight: 700;
+}
+
 .os-gate-list {
   text-align: left;
   font-size: 0.88rem;
@@ -973,8 +1004,20 @@ body.no-anim * { animation-duration: 0s !important; }
   margin: 0 0 14px;
   line-height: 1.75;
 }
-.os-gate-ask { font-weight: 600; color: var(--text-primary); margin-bottom: 16px; font-size: 1rem; }
-.os-gate-actions { display: flex; gap: 12px; justify-content: center; }
+
+.os-gate-ask {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  font-size: 1rem;
+}
+
+.os-gate-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
 .os-gate-btn {
   padding: 10px 22px;
   border-radius: 8px;
@@ -984,12 +1027,27 @@ body.no-anim * { animation-duration: 0s !important; }
   font-weight: 600;
   cursor: pointer;
   transition: var(--transition);
+  pointer-events: auto;
 }
-.os-gate-btn-secondary { background: var(--bg-detail); color: var(--text-primary); }
+
+.os-gate-btn-secondary {
+  background: var(--bg-detail);
+  color: var(--text-primary);
+}
 .os-gate-btn-secondary:hover { background: rgba(0, 0, 0, 0.06); }
-.os-gate-btn-primary { background: var(--accent-green); color: #fff; border-color: var(--accent-green); }
+
+.os-gate-btn-primary {
+  background: var(--accent-green);
+  color: #fff;
+  border-color: var(--accent-green);
+}
 .os-gate-btn-primary:hover { background: var(--accent-green-strong); }
-.os-gate-hint { font-size: 0.8rem; color: var(--text-faint); margin-top: 12px; }
+
+.os-gate-hint {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  margin-top: 12px;
+}
 
 /* ========== WASM warning ========== */
 .wasm-warning {
@@ -1146,3 +1204,19 @@ body.no-anim * { animation-duration: 0s !important; }
   .faq-section { padding: 20px 18px; }
   .settings-panel { width: 100%; }
 }
+
+/* ========== Density Styles ========== */
+.version-grid { gap: var(--card-gap, 14px); }
+.version-card { padding: var(--card-padding, 18px 20px 14px); }
+
+body.no-anim *,
+body.no-anim *::before,
+body.no-anim *::after {
+  animation-duration: 0s !important;
+  transition-duration: 0s !important;
+}
+
+body.density-compact .group-header { margin-bottom: 8px; }
+body.density-compact .version-sections { gap: 20px; }
+body.density-spacious .group-header { margin-bottom: 18px; }
+body.density-spacious .version-sections { gap: 40px; }

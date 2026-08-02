@@ -18,8 +18,7 @@ const VERSIONS = [
     modpack: false,
     description: '兼容性最佳。支持 PC + 手机，局域网 & P2P 联机，光影效果。',
     recommendTag: '推荐 | 最佳兼容',
-    detail: '🌏语言：简体中文、英文\n' +
-            '🌏 语言：简体中文、英文\n' +
+    detail: '🌏 语言：简体中文、英文\n' +
             '💻 性能：高\n' +
             '🎮 设备：电脑键鼠操作、手机触屏操作\n' +
             '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
@@ -48,8 +47,7 @@ const VERSIONS = [
     modpack: false,
     description: '性能最佳。WASM 增强，更高 FPS。需要现代 Chrome 浏览器。',
     recommendTag: '推荐 | 最佳性能',
-    detail: '🌏语言：简体中文、英文\n' +
-            '🌏 语言：简体中文、英文\n' +
+    detail: '🌏 语言：简体中文、英文\n' +
             '💻 性能：极高\n' +
             '🎮 设备：电脑键鼠操作、手机触屏操作\n' +
             '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +

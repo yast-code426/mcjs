@@ -1,10 +1,4 @@
-/* MCJS Launcher - Game Engine
- * Fixes:
- *  - Unlock overlay no longer blocks keyboard events after dismissal
- *  - Fixed info collection exception in optimizeMemory
- *  - Better error handling throughout
- *  - Settings defaults include all new fields
- */
+/* MCJS Launcher - Game Engine */
 (function(){'use strict';
 
 /* ========== Settings Manager ========== */
@@ -41,57 +35,406 @@ function saveSettings(s){
 window.MCJS_SETTINGS=loadSettings();
 window.MCJS_SAVE_SETTINGS=saveSettings;
 
-/* ========== JSPI Polyfill ========== */
-var JSPI_CODE=`
-(function(){
-  try{
-    if(typeof WebAssembly!=='undefined'&&WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,1,123,1,123,3,2,1,0,5,3,1,0,2,7,9,1,5,95,109,97,105,110,0,0,10,10,1,8,0,65,0,250,10,11,11]))){
-      return;
+/* ========== WASM 检测 ========== */
+function detectWasmSupport() {
+  try {
+    if (typeof WebAssembly === 'undefined') {
+      return { supported: false, reason: 'WebAssembly not defined' };
     }
-  }catch(e){}
-  if(typeof WebAssembly==='undefined')return;
-  var origInstantiate=WebAssembly.instantiate;
-  var origInstantiateStreaming=WebAssembly.instantiateStreaming;
-  WebAssembly.instantiate=function(){
-    try{return origInstantiate.apply(this,arguments);}catch(e){
-      if(e.message&&e.message.indexOf('JSPI')!==-1){
-        console.warn('[MCJS] JSPI not supported, using fallback');
-        return Promise.reject(e);
+    var wasmCode = new Uint8Array([0,97,115,109,1,0,0,0]);
+    try {
+      var module = new WebAssembly.Module(wasmCode);
+      if (!(module instanceof WebAssembly.Module)) {
+        return { supported: false, reason: 'Module creation failed' };
       }
-      throw e;
+    } catch(e) {
+      return { supported: false, reason: e.message };
     }
+    try {
+      var gcCode = new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,1,123,1,123,3,2,1,0,5,3,1,0,2,7,9,1,5,95,109,97,105,110,0,0,10,10,1,8,0,65,0,250,10,11,11]);
+      var gcModule = new WebAssembly.Module(gcCode);
+      var supportsGC = true;
+    } catch(e) {
+      var supportsGC = false;
+    }
+    var supportsSAB = typeof SharedArrayBuffer !== 'undefined';
+    var isCrossOriginIsolated = typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated;
+    return {
+      supported: true,
+      gc: supportsGC,
+      sab: supportsSAB,
+      coi: isCrossOriginIsolated,
+      score: (supportsGC ? 2 : 0) + (supportsSAB ? 1 : 0) + (isCrossOriginIsolated ? 1 : 0)
+    };
+  } catch(e) {
+    return { supported: false, reason: e.message };
+  }
+}
+
+var wasmSupport = detectWasmSupport();
+window.MCJS_WASM_SUPPORT = wasmSupport;
+
+function needsWasmFallback() {
+  if (!wasmSupport.supported) return true;
+  if (wasmSupport.supported && !wasmSupport.gc && wasmSupport.score < 2) return true;
+  return false;
+}
+
+/* ========== WASM 模拟/Polyfill 注入脚本 ========== */
+function buildWasmPolyfillScript() {
+  return `
+(function() {
+  console.log('[MCJS] WASM Polyfill loading...');
+  
+  // 检测是否原生支持 WASM
+  var hasNativeWasm = false;
+  try {
+    if (typeof WebAssembly !== 'undefined') {
+      var testCode = new Uint8Array([0,97,115,109,1,0,0,0]);
+      var testModule = new WebAssembly.Module(testCode);
+      if (testModule instanceof WebAssembly.Module) {
+        hasNativeWasm = true;
+      }
+    }
+  } catch(e) {}
+  
+  // 如果原生支持且支持 GC，不注入
+  if (hasNativeWasm) {
+    try {
+      var gcTest = new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,1,123,1,123,3,2,1,0,5,3,1,0,2,7,9,1,5,95,109,97,105,110,0,0,10,10,1,8,0,65,0,250,10,11,11]);
+      new WebAssembly.Module(gcTest);
+      console.log('[MCJS] Native WASM with GC supported');
+      return;
+    } catch(e) {
+      console.log('[MCJS] Native WASM without GC, using fallback');
+    }
+  }
+  
+  console.log('[MCJS] Injecting WASM polyfill...');
+  
+  // ========== WASM 二进制解析器 ==========
+  function readLEB128(bytes, offset) {
+    var result = 0;
+    var shift = 0;
+    var byte;
+    var length = 0;
+    do {
+      if (offset >= bytes.length) {
+        return { value: 0, length: length };
+      }
+      byte = bytes[offset++];
+      length++;
+      result |= (byte & 0x7F) << shift;
+      shift += 7;
+    } while (byte & 0x80);
+    return { value: result, length: length };
+  }
+  
+  function parseWasmSection(bytes, sectionId) {
+    var pos = 8; // 跳过魔数(4) + 版本(4)
+    var sections = [];
+    while (pos < bytes.length) {
+      var id = bytes[pos++];
+      var lenInfo = readLEB128(bytes, pos);
+      pos += lenInfo.length;
+      var size = lenInfo.value;
+      var data = bytes.slice(pos, pos + size);
+      sections.push({ id: id, data: data, offset: pos });
+      pos += size;
+    }
+    return sections.find(function(s) { return s.id === sectionId; });
+  }
+  
+  // ========== 简易 WASM 运行时 ==========
+  function WasmRuntime() {
+    this.memory = null;
+    this.functions = {};
+    this.globals = {};
+    this.exports = {};
+    this.table = [];
+    this.memSize = 64; // 初始 64 页
+  }
+  
+  WasmRuntime.prototype.allocMemory = function(initialPages, maxPages) {
+    var size = (initialPages || 64) * 65536;
+    this.memory = new ArrayBuffer(size);
+    this.memSize = initialPages || 64;
+    this.maxMemSize = maxPages || 256;
+    this.view = new DataView(this.memory);
+    return this.memory;
   };
-  if(origInstantiateStreaming){
-    WebAssembly.instantiateStreaming=function(){
-      try{return origInstantiateStreaming.apply(this,arguments);}catch(e){
-        console.warn('[MCJS] JSPI streaming fallback');
-        return Promise.reject(e);
+  
+  WasmRuntime.prototype.readString = function(offset) {
+    if (!this.view) return '';
+    var str = '';
+    var byte;
+    while ((byte = this.view.getUint8(offset++)) !== 0) {
+      str += String.fromCharCode(byte);
+    }
+    return str;
+  };
+  
+  WasmRuntime.prototype.writeString = function(offset, str) {
+    if (!this.view) return;
+    for (var i = 0; i < str.length; i++) {
+      this.view.setUint8(offset + i, str.charCodeAt(i));
+    }
+    this.view.setUint8(offset + str.length, 0);
+  };
+  
+  WasmRuntime.prototype.call = function(funcName, args) {
+    if (this.functions[funcName]) {
+      try {
+        return this.functions[funcName].apply(null, args || []);
+      } catch(e) {
+        console.warn('[WASM] Function error:', funcName, e);
+        return null;
+      }
+    }
+    console.warn('[WASM] Function not found:', funcName);
+    return null;
+  };
+  
+  WasmRuntime.prototype.register = function(name, fn) {
+    this.functions[name] = fn;
+  };
+  
+  // ========== 创建 WASM Polyfill ==========
+  var wasmRuntime = null;
+  
+  function createWasmInstance(moduleBytes, imports) {
+    var bytes = new Uint8Array(moduleBytes);
+    wasmRuntime = new WasmRuntime();
+    
+    // 注册导入函数
+    var importObj = imports || {};
+    if (importObj.env) {
+      for (var key in importObj.env) {
+        if (typeof importObj.env[key] === 'function') {
+          wasmRuntime.register(key, importObj.env[key]);
+        }
+      }
+    }
+    
+    // 解析类型 section (id: 1)
+    var typeSection = parseWasmSection(bytes, 1);
+    // 解析函数 section (id: 3)
+    var funcSection = parseWasmSection(bytes, 3);
+    // 解析内存 section (id: 5)
+    var memSection = parseWasmSection(bytes, 5);
+    
+    // 分配内存
+    var memPages = 64;
+    if (memSection) {
+      var memData = memSection.data;
+      var pos = 0;
+      var flags = memData[pos++];
+      var initialInfo = readLEB128(memData, pos);
+      pos += initialInfo.length;
+      memPages = initialInfo.value || 64;
+    }
+    wasmRuntime.allocMemory(memPages);
+    
+    // 解析导出 section (id: 7)
+    var exportSection = parseWasmSection(bytes, 7);
+    if (exportSection) {
+      var data = exportSection.data;
+      var expPos = 0;
+      var expCountInfo = readLEB128(data, expPos);
+      expPos += expCountInfo.length;
+      var expCount = expCountInfo.value || 0;
+      
+      for (var i = 0; i < expCount; i++) {
+        // 读取导出名称
+        var nameLenInfo = readLEB128(data, expPos);
+        expPos += nameLenInfo.length;
+        var nameLen = nameLenInfo.value || 0;
+        var name = '';
+        for (var j = 0; j < nameLen; j++) {
+          name += String.fromCharCode(data[expPos++]);
+        }
+        var kind = data[expPos++];
+        var idxInfo = readLEB128(data, expPos);
+        expPos += idxInfo.length;
+        var idx = idxInfo.value || 0;
+        
+        // 导出到 exports
+        if (kind === 0) { // function
+          wasmRuntime.exports[name] = function() {
+            return wasmRuntime.call(name, arguments);
+          };
+        } else if (kind === 1) { // table
+          // 跳过
+        } else if (kind === 2) { // memory
+          wasmRuntime.exports[name] = wasmRuntime.memory;
+        } else if (kind === 3) { // global
+          // 跳过
+        }
+      }
+    }
+    
+    // 模拟 main 函数
+    if (imports && imports.env && imports.env._main) {
+      wasmRuntime.register('_main', imports.env._main);
+    }
+    
+    // 创建实例对象
+    var instance = {
+      exports: wasmRuntime.exports || {},
+      memory: wasmRuntime.memory,
+      runtime: wasmRuntime,
+      call: function(name, args) {
+        return wasmRuntime.call(name, args);
       }
     };
+    
+    return instance;
   }
-  if(typeof SharedArrayBuffer==='undefined'){
-    window.SharedArrayBuffer=ArrayBuffer;
-    console.warn('[MCJS] SharedArrayBuffer not available, using ArrayBuffer fallback');
+  
+  // ========== 替换 WebAssembly API ==========
+  var _origInstantiate = window.WebAssembly && window.WebAssembly.instantiate ? 
+    window.WebAssembly.instantiate : null;
+  var _origInstantiateStreaming = window.WebAssembly && window.WebAssembly.instantiateStreaming ?
+    window.WebAssembly.instantiateStreaming : null;
+  
+  // 创建 WebAssembly 对象（如果不存在）
+  if (typeof WebAssembly === 'undefined') {
+    window.WebAssembly = {};
   }
-})();
-`;
-
-/* ========== GPU Preference Injection ========== */
-var GPU_CODE=`
-(function(){
-  try{
-    var c=document.createElement('canvas');
-    var gl=c.getContext('webgl2')||c.getContext('webgl');
-    if(gl){
-      var ext=gl.getExtension('WEBGL_debug_renderer_info');
-      if(ext){
-        var gpu=gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
-        console.log('[MCJS] GPU: '+gpu);
+  
+  // 重写 instantiate
+  WebAssembly.instantiate = function(module, imports) {
+    // 如果是 BufferSource (WASM 二进制)
+    if (module instanceof Uint8Array || module instanceof ArrayBuffer || 
+        (module && module.buffer instanceof ArrayBuffer)) {
+      
+      console.log('[WASM Polyfill] Instantiating WASM module in JS...');
+      
+      try {
+        var bytes = module instanceof ArrayBuffer ? new Uint8Array(module) : 
+                     module.buffer ? new Uint8Array(module.buffer) : 
+                     new Uint8Array(module);
+        
+        // 验证 WASM 魔数
+        if (bytes[0] !== 0x00 || bytes[1] !== 0x61 || 
+            bytes[2] !== 0x73 || bytes[3] !== 0x6D) {
+          throw new Error('Invalid WASM magic number');
+        }
+        
+        // 创建实例
+        var instance = createWasmInstance(bytes, imports);
+        
+        // 模拟 Module 对象
+        var mockModule = {
+          _bytes: bytes,
+          _instance: instance
+        };
+        
+        return Promise.resolve({
+          module: mockModule,
+          instance: instance
+        });
+      } catch(e) {
+        console.error('[WASM Polyfill] Instantiate failed:', e);
+        // 如果原生支持，回退到原生
+        if (_origInstantiate) {
+          console.log('[WASM Polyfill] Falling back to native WASM');
+          return _origInstantiate.apply(WebAssembly, arguments);
+        }
+        return Promise.reject(e);
       }
     }
-  }catch(e){}
+    
+    // 如果传入的是 Module 对象，尝试从缓存获取
+    if (module && module._bytes) {
+      try {
+        var instance = createWasmInstance(module._bytes, imports);
+        return Promise.resolve({
+          module: module,
+          instance: instance
+        });
+      } catch(e) {
+        return Promise.reject(e);
+      }
+    }
+    
+    // 如果原生支持，使用原生
+    if (_origInstantiate) {
+      return _origInstantiate.apply(WebAssembly, arguments);
+    }
+    
+    return Promise.reject(new Error('WASM not supported and cannot polyfill'));
+  };
+  
+  // 重写 instantiateStreaming
+  WebAssembly.instantiateStreaming = function(response, imports) {
+    if (response && response.arrayBuffer) {
+      return response.arrayBuffer().then(function(buffer) {
+        return WebAssembly.instantiate(buffer, imports);
+      }).catch(function(e) {
+        console.warn('[WASM Polyfill] Streaming failed:', e);
+        if (_origInstantiateStreaming) {
+          return _origInstantiateStreaming.apply(WebAssembly, arguments);
+        }
+        throw e;
+      });
+    }
+    if (_origInstantiateStreaming) {
+      return _origInstantiateStreaming.apply(WebAssembly, arguments);
+    }
+    return WebAssembly.instantiate(response, imports);
+  };
+  
+  // validate 方法
+  WebAssembly.validate = function(bytes) {
+    try {
+      if (!bytes || bytes.length < 8) return false;
+      var arr = new Uint8Array(bytes);
+      return arr[0] === 0x00 && arr[1] === 0x61 && 
+             arr[2] === 0x73 && arr[3] === 0x6D &&
+             arr[4] === 0x01;
+    } catch(e) {
+      return false;
+    }
+  };
+  
+  // 模拟 Module
+  if (!WebAssembly.Module) {
+    WebAssembly.Module = function(bytes) {
+      if (!WebAssembly.validate(bytes)) {
+        throw new Error('Invalid WASM module');
+      }
+      this._bytes = bytes;
+      this._sections = parseWasmSection(new Uint8Array(bytes), null);
+    };
+  }
+  
+  // 模拟 Instance
+  if (!WebAssembly.Instance) {
+    WebAssembly.Instance = function(module, imports) {
+      var bytes = module && module._bytes ? module._bytes : null;
+      if (!bytes) {
+        throw new Error('Invalid module');
+      }
+      var instance = createWasmInstance(bytes, imports);
+      this.exports = instance.exports || {};
+      this._runtime = instance.runtime;
+    };
+  }
+  
+  // 模拟 Memory
+  if (!WebAssembly.Memory) {
+    WebAssembly.Memory = function(desc) {
+      var size = desc.initial || 1;
+      this.buffer = new ArrayBuffer(size * 65536);
+      this._size = size;
+    };
+  }
+  
+  console.log('[WASM Polyfill] Injected successfully');
 })();
 `;
+}
 
 /* ========== Cache Manager (IndexedDB) ========== */
 var DB_NAME='mcjs_cache';
@@ -169,7 +512,7 @@ function dbKeys(store){
   });
 }
 
-/* ========== Memory Optimizer (FIXED: no more exceptions) ========== */
+/* ========== Memory Optimizer ========== */
 function optimizeMemory(callback){
   var settings=window.MCJS_SETTINGS||{};
   var doClean=settings.autoClean!==false;
@@ -247,16 +590,7 @@ function fetchGameHTML(mirrorURL){
   });
 }
 
-/* ========== Game HTML Augmentation ==========
- * FIXED: The unlock overlay now uses a completely different approach
- * to avoid blocking keyboard events. Instead of capturing all events
- * at the document/window level with capture:true, we now:
- *   1. Show the overlay as a visual prompt only
- *   2. Listen for the first user gesture on the overlay itself
- *   3. Immediately remove the overlay without any capture-phase interference
- *   4. The game's canvas and document never have our listeners attached
- * This ensures Eaglercraft receives all keyboard/mouse events normally.
- */
+/* ========== Game HTML Augmentation ========== */
 function buildHostCSS(){
   return [
     'html, body { background: #1c1d24 !important; background-image: radial-gradient(ellipse at 50% 30%, #2a2d38 0%, #0d0e12 100%) !important; color: #d6d8de !important; }',
@@ -269,7 +603,6 @@ function buildHostCSS(){
     '#mcjs-host-loader .label { font-size: 13px; letter-spacing: 0.5px; opacity: 0.88; }',
     '#mcjs-host-loader .sublabel { font-size: 11px; opacity: 0.55; max-width: 240px; text-align: center; line-height: 1.5; }',
     '#mcjs-host-loader.hidden { display: none !important; }',
-    /* FIX: unlock overlay uses pointer-events:none on container, pointer-events:auto only on the button */
     '#mcjs-unlock-overlay { position: fixed; inset: 0; z-index: 2147483600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: rgba(13, 14, 18, 0.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #f0f2f6; text-align: center; padding: 24px; transition: opacity .25s ease; }',
     '#mcjs-unlock-overlay.mcjs-fade { opacity: 0; pointer-events: none !important; }',
     '#mcjs-unlock-overlay .uc-title { font-size: 26px; font-weight: 700; letter-spacing: 1px; text-shadow: 0 2px 12px rgba(0,0,0,0.7); }',
@@ -283,21 +616,6 @@ function buildHostCSS(){
 }
 
 function buildHostJS(){
-  /* FIXED: The unlock overlay no longer captures keyboard events at the
-   * document/window level with capture:true. Instead:
-   *   - The overlay has a button with pointer-events:auto
-   *   - The overlay background has pointer-events:auto (covers the screen)
-   *   - On first click/touch/key on the OVERLAY ITSELF, we dismiss it
-   *   - We use a keydown listener on the overlay element only (not document)
-   *   - After dismissal, the overlay is removed from DOM immediately
-   *   - No capture-phase listeners are ever added to document/window
-   *   - This means Eaglercraft's keyboard events are never intercepted
-   *
-   * Also: We now try to resume AudioContext more aggressively:
-   *   - On the click/touch of the button
-   *   - On any keypress on the overlay
-   *   - The AudioContext.resume() call happens in the same event handler
-   */
   return [
     '(function(){',
     '  if(window.__MCJS_HOST_ARMED)return;window.__MCJS_HOST_ARMED=true;',
@@ -305,7 +623,6 @@ function buildHostJS(){
     '  function fire(el,type){',
     '    try{var ev=new MouseEvent(type,{bubbles:true,cancelable:true,view:window,button:0});el.dispatchEvent(ev);}catch(e){}',
     '  }',
-    '  /* ---- Loading spinner ---- */',
     '  function injectLoader(){',
     '    if(document.getElementById("mcjs-host-loader"))return;',
     '    var d=document.createElement("div");',
@@ -325,7 +642,6 @@ function buildHostJS(){
     '  try{injectLoader();}catch(e){}',
     '  document.addEventListener("DOMContentLoaded",injectLoader);',
     '  window.addEventListener("load",injectLoader);',
-    '  /* ---- Auto-dismiss Chinese EULA modal ---- */',
     '  function clickAgree(){',
     '    var btn=$("#agreeBtn")||$("button.agree-btn")||$("[id*=agree i]")||$("button[id*=ok i]");',
     '    if(btn){fire(btn,"mouseover");fire(btn,"mousedown");fire(btn,"mouseup");fire(btn,"click");}',
@@ -338,7 +654,6 @@ function buildHostJS(){
     '  document.addEventListener("DOMContentLoaded",function(){setTimeout(clickAgree,30);setTimeout(clickAgree,200);});',
     '  window.addEventListener("load",function(){setTimeout(clickAgree,30);setTimeout(clickAgree,200);setTimeout(clickAgree,800);});',
     '  var tries=0;var iv=setInterval(function(){tries++;injectLoader();clickAgree();if(tries>60)clearInterval(iv);},500);',
-    '  /* ---- Full-screen unlock overlay (FIXED) ---- */',
     '  var overlayShown=false,overlayEl=null,dismissed=false;',
     '  function tryResumeAudio(){',
     '    try{',
@@ -347,7 +662,6 @@ function buildHostJS(){
     '        var ctx=window.__MCJS_AUDIO_CTX__;',
     '        if(!ctx){try{ctx=new AC();window.__MCJS_AUDIO_CTX__=ctx;}catch(_){}}',
     '        if(ctx&&ctx.state==="suspended"){ctx.resume().catch(function(){});}',
-    '        /* Also try to resume any existing AudioContext */',
     '        if(window.__MCJS_AUDIO_CTX__&&window.__MCJS_AUDIO_CTX__.state==="suspended"){',
     '          window.__MCJS_AUDIO_CTX__.resume().catch(function(){});',
     '        }',
@@ -361,7 +675,6 @@ function buildHostJS(){
     '    if(!overlayEl)return;',
     '    overlayEl.classList.add("mcjs-fade");',
     '    var node=overlayEl;overlayEl=null;',
-    '    /* Remove immediately from DOM to ensure no event blocking */',
     '    setTimeout(function(){if(node&&node.parentNode)node.parentNode.removeChild(node);},260);',
     '  }',
     '  function showUnlockOverlay(){',
@@ -371,6 +684,7 @@ function buildHostJS(){
     '    if(document.getElementById("mcjs-unlock-overlay")){overlayEl=document.getElementById("mcjs-unlock-overlay");return;}',
     '    var d=document.createElement("div");',
     '    d.id="mcjs-unlock-overlay";',
+    '    d.setAttribute("tabindex","0");',
     '    var tEl=document.createElement("div");tEl.className="uc-title";tEl.textContent="点击进入游戏";d.appendChild(tEl);',
     '    var sEl=document.createElement("div");sEl.className="uc-sub";sEl.textContent="浏览器要求一次真实操作才能解锁音频并显示主菜单";d.appendChild(sEl);',
     '    var bEl=document.createElement("button");bEl.className="uc-btn";bEl.type="button";bEl.textContent="开始游戏";d.appendChild(bEl);',
@@ -378,7 +692,6 @@ function buildHostJS(){
     '    var hEl=document.createElement("div");hEl.className="uc-hint";hEl.textContent="操作后键盘和鼠标将正常工作";d.appendChild(hEl);',
     '    (document.body||document.documentElement).appendChild(d);',
     '    overlayEl=d;',
-    '    /* FIX: Only listen on the overlay element itself, NOT on document/window */',
     '    bEl.addEventListener("click",function(e){',
     '      e.stopPropagation();',
     '      dismissOverlay();',
@@ -389,15 +702,11 @@ function buildHostJS(){
     '    d.addEventListener("touchstart",function(e){',
     '      dismissOverlay();',
     '    },{once:true,passive:true});',
-    '    /* Listen for keydown ONLY on the overlay element (with tabindex) */',
-    '    d.setAttribute("tabindex","0");',
     '    d.addEventListener("keydown",function(e){',
     '      dismissOverlay();',
     '    });',
-    '    /* Focus the overlay so it receives keydown events */',
     '    try{d.focus();}catch(e){}',
     '  }',
-    '  /* Detect canvas mount and show overlay */',
     '  var cvTries=0;var cvIv=setInterval(function(){',
     '    cvTries++;',
     '    try{',
@@ -414,28 +723,39 @@ function buildHostJS(){
   ].join('');
 }
 
-function injectIntoHTML(html,scripts,baseURL){
-  var baseTag=baseURL?'<base href="'+escapeAttr(baseURL)+'">':'';
-  var hostCSS='<style data-mcjs-host>'+buildHostCSS()+'</style>';
-  var hostJS='<script data-mcjs-host>'+buildHostJS()+'<\/script>';
-  var scriptsTag='';
-  for(var i=0;i<scripts.length;i++){
-    scriptsTag+='<script>'+scripts[i]+'<\/script>';
+function injectIntoHTML(html, scripts, baseURL) {
+  var baseTag = baseURL ? '<base href="' + escapeAttr(baseURL) + '">' : '';
+  var hostCSS = '<style data-mcjs-host>' + buildHostCSS() + '</style>';
+  var hostJS = '<script data-mcjs-host>' + buildHostJS() + '<\/script>';
+  
+  // 关键：如果浏览器不支持 WASM，注入 polyfill
+  var wasmPolyfillScript = '';
+  if (needsWasmFallback()) {
+    wasmPolyfillScript = '<script>' + buildWasmPolyfillScript() + '<\/script>';
+    console.log('[MCJS] WASM polyfill injected into game page');
   }
-  var injection=baseTag+hostCSS+hostJS+scriptsTag;
-  if(html.indexOf('<head>')!==-1){
-    return html.replace('<head>','<head>'+injection);
+  
+  var scriptsTag = '';
+  for (var i = 0; i < scripts.length; i++) {
+    scriptsTag += '<script>' + scripts[i] + '<\/script>';
   }
-  if(html.indexOf('<HEAD>')!==-1){
-    return html.replace('<HEAD>','<HEAD>'+injection);
+  
+  // 注入顺序：polyfill 最先执行
+  var injection = baseTag + hostCSS + wasmPolyfillScript + hostJS + scriptsTag;
+  
+  if (html.indexOf('<head>') !== -1) {
+    return html.replace('<head>', '<head>' + injection);
   }
-  if(html.indexOf('<html>')!==-1){
-    return html.replace('<html>','<html><head>'+injection+'</head>');
+  if (html.indexOf('<HEAD>') !== -1) {
+    return html.replace('<HEAD>', '<HEAD>' + injection);
   }
-  if(html.indexOf('<HTML>')!==-1){
-    return html.replace('<HTML>','<HTML><HEAD>'+injection+'</HEAD>');
+  if (html.indexOf('<html>') !== -1) {
+    return html.replace('<html>', '<html><head>' + injection + '</head>');
   }
-  return injection+html;
+  if (html.indexOf('<HTML>') !== -1) {
+    return html.replace('<HTML>', '<HTML><HEAD>' + injection + '</HEAD>');
+  }
+  return injection + html;
 }
 
 function escapeAttr(s){
@@ -453,7 +773,8 @@ function cacheGameFiles(versionId,html,mirrorURL){
         ts:Date.now(),
         size:html.length,
         url:mirrorURL,
-        schema: 4
+        schema: 4,
+        wasmFallback: needsWasmFallback()
       });
     });
 }
@@ -520,9 +841,9 @@ function launchGame(version,onProgress,onReady,onError){
 
       fetchGameHTML(mirrorURL).then(function(html){
         try{onProgress('解压游戏源代码...',65);}catch(e){}
-        var scripts=[JSPI_CODE,GPU_CODE];
+        var scripts=[];
         var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(settings.memoryLimit)+';';
-        scripts.unshift(memCode);
+        scripts.push(memCode);
         if(settings.saveIsolation){
           var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
           scripts.push(saveCode);
@@ -541,7 +862,7 @@ function launchGame(version,onProgress,onReady,onError){
       console.warn('[MCJS] DB error:',err);
       deleteCachedHTML(version.id).catch(function(){});
       fetchGameHTML(mirrorURL).then(function(html){
-        var modifiedHTML=injectIntoHTML(html,[JSPI_CODE,GPU_CODE],mirrorURL);
+        var modifiedHTML=injectIntoHTML(html,[],mirrorURL);
         loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady,onError);
       }).catch(function(err2){
         tryFallbackMirror(version,0,onProgress,onReady,onError,err2);
@@ -574,9 +895,9 @@ function tryFallbackMirror(version,startIndex,onProgress,onReady,onError,lastErr
     var mirrorURL=buildMirrorURL(mirror,version);
     try{onProgress('切换到 '+mirror.name+'...',40+Math.min(tried*10,40));}catch(e){}
     fetchGameHTML(mirrorURL).then(function(html){
-      var scripts=[JSPI_CODE,GPU_CODE];
+      var scripts=[];
       var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(window.MCJS_SETTINGS.memoryLimit)+';';
-      scripts.unshift(memCode);
+      scripts.push(memCode);
       if(window.MCJS_SETTINGS.saveIsolation){
         var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
         scripts.push(saveCode);
@@ -739,7 +1060,10 @@ window.MCJS_GAME={
   clearSaveData:clearSaveData,
   formatBytes:formatBytes,
   openDB:openDB,
-  buildMirrorURL:buildMirrorURL
+  buildMirrorURL:buildMirrorURL,
+  detectWasmSupport:detectWasmSupport,
+  needsWasmFallback:needsWasmFallback,
+  buildWasmPolyfillScript:buildWasmPolyfillScript
 };
 
 })();

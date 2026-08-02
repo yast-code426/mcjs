@@ -1,10 +1,9 @@
 /* MCJS Launcher - Main Application
  * Fixes:
- *  - Settings panel: added new options, fixed missing elements
- *  - Input key handling: no longer blocked by overlay
- *  - Info collection: wrapped in try-catch
- *  - Light theme support
- *  - Important text has distinct colors
+ *  - 修复 WASM 检测逻辑
+ *  - OS Gate 图层置顶 (z-index: 9999)
+ *  - 启动时注入 WASM Polyfill
+ *  - 修复语言信息重复显示
  */
 (function(){'use strict';
 
@@ -211,8 +210,7 @@ searchInput.addEventListener('input',function(){
   },180);
 });
 
-/* ========== Fix: Search input should not be blocked by keyboard events ========== */
-/* Ensure search input always works regardless of any overlay state */
+/* Fix: Search input should not be blocked by keyboard events */
 searchInput.addEventListener('keydown',function(e){
   e.stopPropagation();
 });
@@ -222,6 +220,27 @@ searchInput.addEventListener('keyup',function(e){
 searchInput.addEventListener('keypress',function(e){
   e.stopPropagation();
 });
+
+/* ========== WASM 检测 ========== */
+function checkWasmSupport() {
+  if (window.MCJS_GAME && window.MCJS_GAME.detectWasmSupport) {
+    return window.MCJS_GAME.detectWasmSupport();
+  }
+  // 备用检测
+  try {
+    if (typeof WebAssembly === 'undefined') {
+      return { supported: false, reason: 'WebAssembly not defined' };
+    }
+    var code = new Uint8Array([0,97,115,109,1,0,0,0]);
+    var module = new WebAssembly.Module(code);
+    if (!(module instanceof WebAssembly.Module)) {
+      return { supported: false, reason: 'Module creation failed' };
+    }
+    return { supported: true, gc: false, sab: typeof SharedArrayBuffer !== 'undefined' };
+  } catch(e) {
+    return { supported: false, reason: e.message };
+  }
+}
 
 /* ========== Launch System ========== */
 grid.addEventListener('click',function(e){
@@ -237,27 +256,36 @@ grid.addEventListener('click',function(e){
 });
 
 function launchVersion(id){
-  var ver=VERSIONS.find(function(v){return v.id===id;});
-  if(!ver)return;
+  var ver = VERSIONS.find(function(v){ return v.id === id; });
+  if (!ver) return;
 
-  if(ver.engine==='WASM'&&!window.MCJS_WASM_SUPPORTED){
-    var fallbackId=ver.id.replace(/wasm$/i,'').replace(/u\d+$/,'');
-    var fallback=VERSIONS.find(function(v){
-      return v.id===fallbackId||v.id===fallbackId+'js'||
-             (v.engine==='JS'&&v.version.split(' ')[2]===ver.version.split(' ')[2]);
+  // 检测 WASM 支持
+  var wasmInfo = checkWasmSupport();
+  var hasWasm = wasmInfo && wasmInfo.supported;
+
+  // 如果选择了 WASM 版本但不支持，尝试找 JS 版本
+  if (ver.engine === 'WASM' && !hasWasm) {
+    // 尝试找对应的 JS 版本
+    var jsId = ver.id.replace(/wasm$/i, '').replace(/u\d+wasm$/i, '');
+    var jsVersion = VERSIONS.find(function(v) {
+      return v.id === jsId || v.id === jsId + 'js' || 
+             (v.engine === 'JS' && v.version.split(' ')[2] === ver.version.split(' ')[2]);
     });
-    if(fallback){
-      showWasmWarning('当前版本需要 WebAssembly,但您的浏览器不支持。已自动切换到兼容版本:'+fallback.name);
-      ver=fallback;
+    if (jsVersion) {
+      ver = jsVersion;
+      showWasmWarning('您的浏览器不支持 WebAssembly，已自动切换到 JS 版本: ' + jsVersion.name);
+    } else {
+      // 没有 JS 版本，尝试使用 WASM polyfill
+      showWasmWarning('您的浏览器不支持 WebAssembly，正在使用兼容模式加载（可能性能较差）...');
     }
   }
 
-  gameTitle.textContent=ver.name;
+  gameTitle.textContent = ver.name;
   launchModal.classList.add('active');
-  if(sound)sound.open();
-  launchText.textContent='正在准备启动...';
-  launchDetail.textContent='选择镜像或直接启动';
-  launchProgress.style.width='0%';
+  if (sound) sound.open();
+  launchText.textContent = '正在准备启动...';
+  launchDetail.textContent = '选择镜像或直接启动';
+  launchProgress.style.width = '0%';
 
   renderMirrorSelection(ver);
 }
@@ -548,7 +576,6 @@ function applyCardDensity(){
   if(d!=='comfortable'){
     document.body.classList.add('density-'+d);
   }
-  /* Apply density styles via CSS custom property override */
   var gapMap={'compact':'8px','comfortable':'14px','spacious':'20px'};
   var padMap={'compact':'12px 14px 10px','comfortable':'18px 20px 14px','spacious':'24px 26px 18px'};
   var g=gapMap[d]||'14px';
@@ -700,7 +727,6 @@ function showWasmWarning(msg){
   if(!el||!text)return;
   text.textContent=msg||'已自动回退到兼容版本。';
   el.style.display='flex';
-  setTimeout(function(){hideWasmWarning();},6000);
 }
 function hideWasmWarning(){
   var el=document.getElementById('wasmWarning');
@@ -712,7 +738,6 @@ document.getElementById('wasmWarningClose')&&document.getElementById('wasmWarnin
 
 /* ========== Keyboard Shortcuts ========== */
 document.addEventListener('keydown',function(e){
-  /* Don't capture shortcuts when typing in input fields */
   if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;
 
   if(e.key==='Escape'){
@@ -748,7 +773,7 @@ applyTheme();
 applyFontSize();
 applyCardDensity();
 
-/* ========== OS Gate ========== */
+/* ========== OS Gate (修复: z-index 置顶) ========== */
 (function osGate(){
   var SUPPORTED_RE=/Windows NT|Mac OS X|Macintosh|iPhone|iPad|iPod|Android/i;
   var NAME_MAP=[
@@ -788,7 +813,13 @@ applyCardDensity();
   var osEL=document.getElementById('osGateOs');
   if(osEL)osEL.textContent='检测到您的操作系统：'+osName+' (User-Agent 提示)';
 
+  // 强制置顶显示
   gate.style.display='flex';
+  gate.style.position='fixed';
+  gate.style.inset='0';
+  gate.style.zIndex='9999';
+  gate.style.pointerEvents='auto';
+  
   document.documentElement.style.overflow='hidden';
   document.body.style.overflow='hidden';
 
@@ -810,7 +841,7 @@ applyCardDensity();
       try{window.close();}catch(e){}
       setTimeout(function(){
         try{window.location.replace('about:blank');}catch(e){}
-        document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f0f2f5;color:#1a1d26;font-family:sans-serif;padding:24px;text-align:center;">已放弃访问。请关闭此标签页。</div>';
+        document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f0f2f5;color:#1a1d26;font-family:sans-serif;padding:24px;text-align:center;z-index:9999;">已放弃访问。请关闭此标签页。</div>';
       },50);
     });
   }
@@ -836,32 +867,24 @@ applyCardDensity();
   renderGrid();
   attachHoverSound(document);
 
-  detectWasmSupport();
-})();
-
-function detectWasmSupport(){
-  var supported=false;
-  try{
-    if(typeof WebAssembly!=='undefined'){
-      supported=WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,10,6,1,4,0,65,0,11]));
+  // 检测 WASM 并显示提示
+  var wasmInfo = checkWasmSupport();
+  if (!wasmInfo.supported) {
+    console.warn('[MCJS] WebAssembly not supported - polyfill will be used');
+    var warnEl = document.getElementById('wasmWarning');
+    if (warnEl) {
+      var textEl = document.getElementById('wasmWarningText');
+      if (textEl) {
+        textEl.textContent = '您的浏览器不支持 WebAssembly，启动游戏时将自动使用兼容模式（可能性能较差）';
+      }
+      warnEl.style.display = 'flex';
     }
-  }catch(e){supported=false;}
-  var sabSupported=(typeof SharedArrayBuffer!=='undefined');
-  var coiSupported=typeof crossOriginIsolated!=='undefined'&&crossOriginIsolated;
-  window.MCJS_WASM_SUPPORTED=supported;
-  window.MCJS_SAB_SUPPORTED=sabSupported;
-  window.MCJS_COI_SUPPORTED=coiSupported;
+  }
 
   sound=new SoundManager();
   sound.setEnabled(settings.soundEnabled!==false);
 
-  if(!supported){
-    console.warn('[MCJS] WebAssembly not fully supported - JS versions will be used as fallback.');
-  }
-  if(!coiSupported){
-    console.info('[MCJS] Cross-Origin-Opener-Policy headers missing - some advanced features may be limited.');
-  }
-}
+})();
 
 /* ========== Re-bind hover sounds ========== */
 var _origRenderGrid=renderGrid;
