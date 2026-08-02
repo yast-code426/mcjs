@@ -142,14 +142,14 @@ const VERSIONS = [
             '🎮 设备：仅支持电脑键鼠操作\n' +
             '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '📂 资源：自定义材质包',
-    path: '1.12.2u3wasm',
+    path: '1.12.2wasm-u3',
     mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.12.2u3wasm/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.12.2u3wasm/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.12.2u3wasm/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.12.2u3wasm/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.12.2u3wasm/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.12.2u3wasm/' }
+      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.12.2wasm-u3/' },
+      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.12.2wasm-u3/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.12.2wasm-u3/' },
+      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.12.2wasm-u3/' },
+      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.12.2wasm-u3/' },
+      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.12.2wasm-u3/' }
     ]
   },
 
@@ -254,14 +254,14 @@ const VERSIONS = [
             '🎮 设备：仅支持电脑键鼠操作\n' +
             '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '📂 资源：自定义材质包、内置模组包',
-    path: '1.6.4lite',
+    path: 'modpack/lite',
     mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4lite/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4lite/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4lite/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4lite/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.6.4lite/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.6.4lite/' }
+      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/modpack/lite/' },
+      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/modpack/lite/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/modpack/lite/' },
+      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/modpack/lite/' },
+      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/modpack/lite/' },
+      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/modpack/lite/' }
     ],
     external: true
   },
@@ -285,14 +285,14 @@ const VERSIONS = [
             '🎮 设备：仅支持电脑键鼠操作\n' +
             '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '📂 资源：自定义材质包、内置模组包',
-    path: '1.6.4tech',
+    path: 'modpack/tech',
     mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4tech/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4tech/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4tech/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4tech/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.6.4tech/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.6.4tech/' }
+      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/modpack/tech/' },
+      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/modpack/tech/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/modpack/tech/' },
+      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/modpack/tech/' },
+      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/modpack/tech/' },
+      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/modpack/tech/' }
     ],
     external: true
   },
@@ -316,14 +316,14 @@ const VERSIONS = [
             '🎮 设备：仅支持电脑键鼠操作\n' +
             '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '📂 资源：自定义材质包、内置模组包',
-    path: '1.6.4skyfactory',
+    path: 'modpack/skyfactory',
     mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4skyfactory/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4skyfactory/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4skyfactory/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4skyfactory/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.6.4skyfactory/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.6.4skyfactory/' }
+      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/modpack/skyfactory/' },
+      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/modpack/skyfactory/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/modpack/skyfactory/' },
+      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/modpack/skyfactory/' },
+      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/modpack/skyfactory/' },
+      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/modpack/skyfactory/' }
     ],
     external: true
   },
@@ -347,14 +347,14 @@ const VERSIONS = [
             '🎮 设备：仅支持电脑键鼠操作\n' +
             '🔗 联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '📂 资源：自定义材质包、内置模组包',
-    path: '1.6.4magic',
+    path: 'modpack/magic',
     mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4magic/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4magic/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4magic/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4magic/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.6.4magic/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.6.4magic/' }
+      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/modpack/magic/' },
+      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/modpack/magic/' },
+      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/modpack/magic/' },
+      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/modpack/magic/' },
+      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/modpack/magic/' },
+      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/modpack/magic/' }
     ],
     external: true
   },
