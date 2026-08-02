@@ -1,12 +1,10 @@
 /* MCJS Launcher - Main Application
- * Bug fixes: 2026-08-01
- *  - Toggle switches (.checked) on <button> elements → use classList
- *  - Sound effects via Web Audio API (procedural, no asset needed)
- *  - Search input debouncing for performance
- *  - WASM detection + auto-fallback notice
- *  - Theme: optional dark mode toggle
- *  - Hero stats computed from VERSIONS
- *  - Robust background image fallback chain
+ * Fixes:
+ *  - Settings panel: added new options, fixed missing elements
+ *  - Input key handling: no longer blocked by overlay
+ *  - Info collection: wrapped in try-catch
+ *  - Light theme support
+ *  - Important text has distinct colors
  */
 (function(){'use strict';
 
@@ -27,9 +25,9 @@ var launchContent=document.getElementById('launchContent');
 var searchQuery='';
 var searchDebounceTimer=null;
 var settings=window.MCJS_SETTINGS||{};
-var sound=null; /* Lazy-initialized SoundManager */
+var sound=null;
 
-/* ========== Group Definitions (mcjs.cc style) ========== */
+/* ========== Group Definitions ========== */
 var GROUPS=[
   {
     id:'mcjs',
@@ -64,14 +62,11 @@ var BADGE_MAP={
   'new-beta':{cls:'badge-new',text:'新版测试'}
 };
 
-/* ========== Sound Manager (Web Audio API) ========== */
-/* Procedurally generated UI sounds so we don't need any asset file.
- * Pre-lazy to avoid AudioContext autoplay restrictions. */
+/* ========== Sound Manager ========== */
 var SoundManager=function(){
   this.ctx=null;
   this.enabled=true;
   this.unlocked=false;
-  this._unlockHandler=null;
 };
 SoundManager.prototype._ensureCtx=function(){
   if(this.ctx)return;
@@ -83,12 +78,9 @@ SoundManager.prototype.unlock=function(){
   if(this.unlocked)return;
   this._ensureCtx();
   if(!this.ctx)return;
-  /* Resume context (Safari/iOS) */
   if(this.ctx.state==='suspended'){
-    var self=this;
     this.ctx.resume().catch(function(){});
   }
-  /* Play a silent buffer to fully unlock audio on iOS */
   try{
     var buf=this.ctx.createBuffer(1,1,22050);
     var src=this.ctx.createBufferSource();
@@ -115,14 +107,8 @@ SoundManager.prototype._tone=function(freq,duration,type,volume){
     osc.stop(t+duration+0.02);
   }catch(e){}
 };
-SoundManager.prototype.click=function(){
-  if(!this.enabled)return;
-  this._tone(880,0.06,'square',0.04);
-};
-SoundManager.prototype.hover=function(){
-  if(!this.enabled)return;
-  this._tone(1320,0.04,'sine',0.02);
-};
+SoundManager.prototype.click=function(){if(!this.enabled)return;this._tone(880,0.06,'square',0.04);};
+SoundManager.prototype.hover=function(){if(!this.enabled)return;this._tone(1320,0.04,'sine',0.02);};
 SoundManager.prototype.toggle=function(){
   if(!this.enabled)return;
   this._tone(660,0.08,'triangle',0.05);
@@ -147,13 +133,8 @@ SoundManager.prototype.launch=function(){
     }.bind(this))(notes[i],i*70);
   }
 };
-SoundManager.prototype.error=function(){
-  if(!this.enabled)return;
-  this._tone(220,0.18,'sawtooth',0.06);
-};
-SoundManager.prototype.setEnabled=function(on){
-  this.enabled=!!on;
-};
+SoundManager.prototype.error=function(){if(!this.enabled)return;this._tone(220,0.18,'sawtooth',0.06);};
+SoundManager.prototype.setEnabled=function(on){this.enabled=!!on;};
 
 /* ========== Rendering ========== */
 function escapeHtml(str){
@@ -221,13 +202,25 @@ function renderGrid(){
   grid.innerHTML=html;
 }
 
-/* ========== Search (with debounce) ========== */
+/* ========== Search ========== */
 searchInput.addEventListener('input',function(){
   if(searchDebounceTimer)clearTimeout(searchDebounceTimer);
   searchDebounceTimer=setTimeout(function(){
     searchQuery=searchInput.value.trim();
     renderGrid();
   },180);
+});
+
+/* ========== Fix: Search input should not be blocked by keyboard events ========== */
+/* Ensure search input always works regardless of any overlay state */
+searchInput.addEventListener('keydown',function(e){
+  e.stopPropagation();
+});
+searchInput.addEventListener('keyup',function(e){
+  e.stopPropagation();
+});
+searchInput.addEventListener('keypress',function(e){
+  e.stopPropagation();
 });
 
 /* ========== Launch System ========== */
@@ -247,7 +240,6 @@ function launchVersion(id){
   var ver=VERSIONS.find(function(v){return v.id===id;});
   if(!ver)return;
 
-  /* Auto-fallback for non-WASM browsers when WASM version is selected */
   if(ver.engine==='WASM'&&!window.MCJS_WASM_SUPPORTED){
     var fallbackId=ver.id.replace(/wasm$/i,'').replace(/u\d+$/,'');
     var fallback=VERSIONS.find(function(v){
@@ -291,6 +283,9 @@ function renderMirrorSelection(ver){
     if(sound)sound.click();
     startGameLaunch(ver);
   });
+  document.getElementById('autoLaunchBtn').addEventListener('keydown',function(e){
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();startGameLaunch(ver);}
+  });
 
   container.querySelectorAll('.mirror-item').forEach(function(el){
     el.addEventListener('click',function(){
@@ -300,6 +295,16 @@ function renderMirrorSelection(ver){
       window.MCJS_SETTINGS=settings;
       window.MCJS_SAVE_SETTINGS(settings);
       startGameLaunch(ver);
+    });
+    el.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){
+        e.preventDefault();
+        var idx=parseInt(el.getAttribute('data-mirror'));
+        settings.mirrorIndex=idx;
+        window.MCJS_SETTINGS=settings;
+        window.MCJS_SAVE_SETTINGS(settings);
+        startGameLaunch(ver);
+      }
     });
   });
 }
@@ -316,14 +321,18 @@ function startGameLaunch(ver){
   launchProgress.style.width='0%';
 
   window.MCJS_UPDATE_LAUNCH=function(text,pct){
-    launchText.textContent=text;
-    launchProgress.style.width=pct+'%';
+    try{
+      launchText.textContent=text;
+      launchProgress.style.width=pct+'%';
+    }catch(e){}
   };
 
   window.MCJS_GAME.launch(ver,
     function(text,pct){
-      launchText.textContent=text;
-      launchProgress.style.width=pct+'%';
+      try{
+        launchText.textContent=text;
+        launchProgress.style.width=pct+'%';
+      }catch(e){}
     },
     function(){
       setTimeout(function(){
@@ -333,9 +342,11 @@ function startGameLaunch(ver){
     },
     function(err){
       if(sound)sound.error();
-      launchText.textContent=err;
-      launchDetail.textContent='请检查网络连接后重试';
-      launchProgress.style.width='0%';
+      try{
+        launchText.textContent=err;
+        launchDetail.textContent='请检查网络连接后重试';
+        launchProgress.style.width='0%';
+      }catch(e){}
     }
   );
 }
@@ -382,7 +393,7 @@ function closeSettings(){
   applySettings();
 }
 
-/* ========== Toggle Helpers (fix: <button> does not have .checked) ========== */
+/* ========== Toggle Helpers ========== */
 function setToggle(btn,on){
   if(!btn)return;
   if(on)btn.classList.add('active');
@@ -396,9 +407,7 @@ function getToggle(btn){
 function bindToggle(id,getter,setter){
   var btn=document.getElementById(id);
   if(!btn)return;
-  /* Sync initial state */
   setToggle(btn,getter());
-  /* Avoid double-binding when loadSettingsUI is called repeatedly */
   if(btn._mcjsBound)return;
   btn._mcjsBound=true;
   btn.addEventListener('click',function(){
@@ -407,7 +416,6 @@ function bindToggle(id,getter,setter){
     setter(next);
     if(sound)sound.toggle();
   });
-  /* Keyboard accessibility */
   btn.addEventListener('keydown',function(e){
     if(e.key===' '||e.key==='Enter'){
       e.preventDefault();
@@ -419,11 +427,9 @@ function bindToggle(id,getter,setter){
 function loadSettingsUI(){
   var s=settings;
 
-  /* Mirror selection */
   var mirrorSelect=document.getElementById('settingMirror');
   if(mirrorSelect)mirrorSelect.value=s.mirrorIndex||0;
 
-  /* Memory slider (live) */
   var memSlider=document.getElementById('settingMemory');
   var memValue=document.getElementById('memoryValue');
   if(memSlider&&memValue){
@@ -431,7 +437,6 @@ function loadSettingsUI(){
     memValue.textContent=(s.memoryLimit||512)+' MB';
   }
 
-  /* Cache slider (live) */
   var cacheSlider=document.getElementById('settingCacheLimit');
   var cacheValue=document.getElementById('cacheValue');
   if(cacheSlider&&cacheValue){
@@ -439,11 +444,15 @@ function loadSettingsUI(){
     cacheValue.textContent=(s.cacheSizeLimit||2048)+' MB';
   }
 
-  /* GPU preference */
   var gpuSelect=document.getElementById('settingGPU');
   if(gpuSelect)gpuSelect.value=s.gpuPrefer||'high-performance';
 
-  /* Bind toggles with the *correct* classList-based approach */
+  var fontSelect=document.getElementById('settingFontSize');
+  if(fontSelect)fontSelect.value=s.fontSize||'normal';
+
+  var densitySelect=document.getElementById('settingCardDensity');
+  if(densitySelect)densitySelect.value=s.cardDensity||'comfortable';
+
   bindToggle('settingFullscreen',function(){return s.fullscreenLaunch===true;},function(v){s.fullscreenLaunch=v;});
   bindToggle('settingAutoClean',function(){return s.autoClean!==false;},function(v){s.autoClean=v;});
   bindToggle('settingSaveIsolation',function(){return s.saveIsolation!==false;},function(v){s.saveIsolation=v;});
@@ -455,53 +464,60 @@ function loadSettingsUI(){
     s.soundEnabled=v;
     if(sound)sound.setEnabled(v);
   });
-  bindToggle('settingDarkMode',function(){return s.darkMode===true;},function(v){
-    s.darkMode=v;
-    applyTheme();
-  });
-  bindToggle('settingAnimations',function(){return s.animations!==false;},function(v){
-    s.animations=v;
+  bindToggle('settingAutoUpdateCheck',function(){return s.autoUpdateCheck!==false;},function(v){s.autoUpdateCheck=v;});
+  bindToggle('settingLoadingDetail',function(){return s.loadingDetail!==false;},function(v){s.loadingDetail=v;});
+  bindToggle('settingQuickLaunch',function(){return s.quickLaunch===true;},function(v){s.quickLaunch=v;});
+  bindToggle('settingReduceMotion',function(){return s.reduceMotion===true;},function(v){
+    s.reduceMotion=v;
     applyTheme();
   });
 
-  /* Update cache info */
   updateCacheInfo();
 }
 
 function updateCacheInfo(){
   if(window.MCJS_GAME&&window.MCJS_GAME.getCacheSize){
     window.MCJS_GAME.getCacheSize().then(function(info){
-      var sizeText=window.MCJS_GAME.formatBytes(info.bytes);
-      var sizeEl=document.getElementById('cacheSizeText');
-      var countEl=document.getElementById('cacheFileCount');
-      if(sizeEl)sizeEl.textContent=sizeText;
-      if(countEl)countEl.textContent=info.count+' 个文件';
+      try{
+        var sizeText=window.MCJS_GAME.formatBytes(info.bytes);
+        var sizeEl=document.getElementById('cacheSizeText');
+        var countEl=document.getElementById('cacheFileCount');
+        if(sizeEl)sizeEl.textContent=sizeText;
+        if(countEl)countEl.textContent=info.count+' 个文件';
+      }catch(e){}
     }).catch(function(){
-      var sizeEl=document.getElementById('cacheSizeText');
-      var countEl=document.getElementById('cacheFileCount');
-      if(sizeEl)sizeEl.textContent='无法读取';
-      if(countEl)countEl.textContent='';
+      try{
+        var sizeEl=document.getElementById('cacheSizeText');
+        var countEl=document.getElementById('cacheFileCount');
+        if(sizeEl)sizeEl.textContent='无法读取';
+        if(countEl)countEl.textContent='';
+      }catch(e){}
     });
   }
 }
 
 function applySettings(){
-  /* Read from form elements */
   var mirrorSelect=document.getElementById('settingMirror');
   var memSlider=document.getElementById('settingMemory');
   var cacheSlider=document.getElementById('settingCacheLimit');
   var gpuSelect=document.getElementById('settingGPU');
+  var fontSelect=document.getElementById('settingFontSize');
+  var densitySelect=document.getElementById('settingCardDensity');
 
   if(mirrorSelect)settings.mirrorIndex=parseInt(mirrorSelect.value)||0;
   if(memSlider)settings.memoryLimit=parseInt(memSlider.value)||512;
   if(cacheSlider)settings.cacheSizeLimit=parseInt(cacheSlider.value)||2048;
   if(gpuSelect)settings.gpuPrefer=gpuSelect.value;
+  if(fontSelect)settings.fontSize=fontSelect.value;
+  if(densitySelect)settings.cardDensity=densitySelect.value;
 
   window.MCJS_SETTINGS=settings;
   window.MCJS_SAVE_SETTINGS(settings);
 
   applyBackground();
   applyTheme();
+  applyFontSize();
+  applyCardDensity();
 }
 
 function applyBackground(){
@@ -513,16 +529,32 @@ function applyBackground(){
 }
 
 function applyTheme(){
-  if(settings.darkMode){
-    document.body.classList.add('dark');
-  }else{
-    document.body.classList.remove('dark');
-  }
-  if(settings.animations===false){
+  if(settings.reduceMotion){
     document.body.classList.add('no-anim');
   }else{
     document.body.classList.remove('no-anim');
   }
+}
+
+function applyFontSize(){
+  var sizeMap={'small':'14px','normal':'16px','large':'18px','xlarge':'20px'};
+  var px=sizeMap[settings.fontSize]||'16px';
+  document.documentElement.style.fontSize=px;
+}
+
+function applyCardDensity(){
+  document.body.classList.remove('density-compact','density-comfortable','density-spacious');
+  var d=settings.cardDensity||'comfortable';
+  if(d!=='comfortable'){
+    document.body.classList.add('density-'+d);
+  }
+  /* Apply density styles via CSS custom property override */
+  var gapMap={'compact':'8px','comfortable':'14px','spacious':'20px'};
+  var padMap={'compact':'12px 14px 10px','comfortable':'18px 20px 14px','spacious':'24px 26px 18px'};
+  var g=gapMap[d]||'14px';
+  var p=padMap[d]||'18px 20px 14px';
+  document.documentElement.style.setProperty('--card-gap',g);
+  document.documentElement.style.setProperty('--card-padding',p);
 }
 
 /* Live slider updates */
@@ -570,15 +602,12 @@ document.getElementById('clearSaveBtn').addEventListener('click',function(){
   }
 });
 
-/* Reset OS-gate acknowledgment so the next page-load shows the
- * compatibility notice again.  Useful for users who want to test the
- * notice on a different browser, or who clicked "继续" by mistake. */
+/* Reset OS-gate */
 var resetOsGateBtn=document.getElementById('resetOsGateBtn');
 if(resetOsGateBtn){
   resetOsGateBtn.addEventListener('click',function(){
     if(sound)sound.click();
     if(typeof window.MCJS_RESET_OS_GATE==='function')window.MCJS_RESET_OS_GATE();
-    /* Reload so the gate re-evaluates against the current UA. */
     location.reload();
   });
 }
@@ -620,7 +649,6 @@ window.addEventListener('mcjs:launch-failed',function(e){
   if(launchFailedUrl)launchFailedUrl.value=detail.url||'';
   if(launchFailedModal){
     launchFailedModal.classList.add('active');
-    /* Hide the game overlay too so the user is back in the launcher UI */
     gameOverlay.classList.remove('active');
     if(launchContent)launchContent.style.display='';
   }
@@ -640,15 +668,14 @@ if(launchFailedCopy)launchFailedCopy.addEventListener('click',function(){
   try{
     var ok=document.execCommand('copy');
     if(ok){
-      launchFailedCopy.textContent='已复制 ✓';
+      launchFailedCopy.textContent='已复制';
       if(sound)sound.toggle();
       setTimeout(function(){launchFailedCopy.textContent='复制链接';},1500);
     }
   }catch(e){
-    /* Fallback: try modern API */
     if(navigator.clipboard){
       navigator.clipboard.writeText(launchFailedUrl.value).then(function(){
-        launchFailedCopy.textContent='已复制 ✓';
+        launchFailedCopy.textContent='已复制';
         setTimeout(function(){launchFailedCopy.textContent='复制链接';},1500);
       }).catch(function(){});
     }
@@ -673,7 +700,6 @@ function showWasmWarning(msg){
   if(!el||!text)return;
   text.textContent=msg||'已自动回退到兼容版本。';
   el.style.display='flex';
-  /* Auto-hide after 6s */
   setTimeout(function(){hideWasmWarning();},6000);
 }
 function hideWasmWarning(){
@@ -686,6 +712,9 @@ document.getElementById('wasmWarningClose')&&document.getElementById('wasmWarnin
 
 /* ========== Keyboard Shortcuts ========== */
 document.addEventListener('keydown',function(e){
+  /* Don't capture shortcuts when typing in input fields */
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;
+
   if(e.key==='Escape'){
     if(settingsModal.classList.contains('active')){
       closeSettings();
@@ -699,7 +728,7 @@ document.addEventListener('keydown',function(e){
   }
 });
 
-/* ========== Hover sound on interactive elements ========== */
+/* ========== Hover sound ========== */
 function attachHoverSound(root){
   var nodes=root.querySelectorAll('button,.card-launch-btn,.filter-tab,.mirror-item,.auto-launch-btn,.toolbar-btn');
   nodes.forEach(function(n){
@@ -711,25 +740,16 @@ function attachHoverSound(root){
   });
 }
 
-/* ========== Background Image Toggle (initial) ========== */
+/* ========== Initial setup ========== */
 if(settings.bgImage===false){
   document.body.classList.add('no-bg');
 }
 applyTheme();
+applyFontSize();
+applyCardDensity();
 
-/* ========== OS Gate (Linux / Chrome OS / BSD / unknown) ==========
- * Show a full-screen "你的系统并不支持运行，是否继续？" notice when the
- * user is on an OS that the launcher hasn't been tested against
- * (Windows / macOS / Android / iOS are considered supported).
- *
- * The gate is shown ONCE per browser (per localStorage flag) unless the
- * user explicitly resets it in settings.  When the user clicks "继续",
- * the rest of the launcher is initialised.  When they click "放弃访问",
- * we redirect to a blank page.
- */
+/* ========== OS Gate ========== */
 (function osGate(){
-  /* Supported = the user-agent matches one of these substrings.
-   * "Linux" intentionally NOT included. */
   var SUPPORTED_RE=/Windows NT|Mac OS X|Macintosh|iPhone|iPad|iPod|Android/i;
   var NAME_MAP=[
     {re:/Windows NT 10\.0/,name:'Windows 10/11'},
@@ -755,27 +775,20 @@ applyTheme();
   var osName=detectOS(ua);
   var supported=SUPPORTED_RE.test(ua);
 
-  /* Has the user already acknowledged the gate this session / previously? */
   var ackKey='mcjs_os_gate_ack';
   try{
     var ack=localStorage.getItem(ackKey);
-    if(ack==='1'||ack==='skipped'){return;}  /* proceed straight to startLauncher */
+    if(ack==='1'||ack==='skipped'){return;}
   }catch(e){}
 
-  /* If the OS is supported OR the UA looks suspicious (bots / headless),
-   * do not block them.  This is a courtesy gate, not a security control. */
   if(supported)return;
 
-  /* Build the gate UI inline so it works even before DOMContentLoaded.
-   * We render via DOM API rather than innerHTML to avoid any chance of
-   * an XSS via UA string fields. */
   var gate=document.getElementById('osGate');
   if(!gate)return;
-  var osEl=document.getElementById('osGateOs');
-  if(osEl)osEl.textContent='检测到您的操作系统：'+osName+' (User-Agent 提示)';
+  var osEL=document.getElementById('osGateOs');
+  if(osEL)osEL.textContent='检测到您的操作系统：'+osName+' (User-Agent 提示)';
 
   gate.style.display='flex';
-  /* Freeze the page underneath (prevent scroll / interaction with #app). */
   document.documentElement.style.overflow='hidden';
   document.body.style.overflow='hidden';
 
@@ -794,22 +807,19 @@ applyTheme();
   }
   if(leaveBtn){
     leaveBtn.addEventListener('click',function(){
-      /* Try to close the tab; fall back to about:blank. */
       try{window.close();}catch(e){}
       setTimeout(function(){
         try{window.location.replace('about:blank');}catch(e){}
-        document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#06060c;color:#fff;font-family:sans-serif;padding:24px;text-align:center;">已放弃访问。请关闭此标签页。</div>';
+        document.body.innerHTML='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f0f2f5;color:#1a1d26;font-family:sans-serif;padding:24px;text-align:center;">已放弃访问。请关闭此标签页。</div>';
       },50);
     });
   }
-  /* ESC key on the gate → also leave. */
   document.addEventListener('keydown',function(e){
     if(gate.style.display==='none')return;
     if(e.key==='Escape'){
       if(leaveBtn)leaveBtn.click();
     }
   });
-  /* Expose a reset hook for settings. */
   window.MCJS_RESET_OS_GATE=function(){
     try{localStorage.removeItem(ackKey);}catch(e){}
   };
@@ -817,7 +827,6 @@ applyTheme();
 
 /* ========== Init ========== */
 (function init(){
-  /* Update version counts in the header + hero subtitle. */
   var total=VERSIONS.length;
   var vCountEl=document.getElementById('versionCount');
   if(vCountEl)vCountEl.textContent=total+' 个真实版本';
@@ -827,10 +836,6 @@ applyTheme();
   renderGrid();
   attachHoverSound(document);
 
-  /* Lazy-load settings UI: defer first-time DOM setup to first open */
-  /* (loadSettingsUI is idempotent thanks to ._mcjsBound flags) */
-
-  /* Detect WASM support once at startup */
   detectWasmSupport();
 })();
 
@@ -838,26 +843,18 @@ function detectWasmSupport(){
   var supported=false;
   try{
     if(typeof WebAssembly!=='undefined'){
-      /* Try a tiny module */
       supported=WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,10,6,1,4,0,65,0,11]));
     }
   }catch(e){supported=false;}
-  /* Also detect SharedArrayBuffer (often required for Eaglercraft WASM) */
   var sabSupported=(typeof SharedArrayBuffer!=='undefined');
-  /* crossOriginIsolated is required for SharedArrayBuffer on modern browsers */
   var coiSupported=typeof crossOriginIsolated!=='undefined'&&crossOriginIsolated;
   window.MCJS_WASM_SUPPORTED=supported;
   window.MCJS_SAB_SUPPORTED=sabSupported;
   window.MCJS_COI_SUPPORTED=coiSupported;
-  /* Lazy initialize sound system but don't auto-unlock */
-  if(settings.soundEnabled!==false){
-    sound=new SoundManager();
-    sound.setEnabled(settings.soundEnabled!==false);
-  } else {
-    sound=new SoundManager();
-    sound.setEnabled(false);
-  }
-  /* If a WASM is selected but unsupported, show a one-time notice when WASM is requested */
+
+  sound=new SoundManager();
+  sound.setEnabled(settings.soundEnabled!==false);
+
   if(!supported){
     console.warn('[MCJS] WebAssembly not fully supported - JS versions will be used as fallback.');
   }
@@ -866,14 +863,14 @@ function detectWasmSupport(){
   }
 }
 
-/* ========== Re-bind hover sounds when grid re-renders ========== */
+/* ========== Re-bind hover sounds ========== */
 var _origRenderGrid=renderGrid;
 renderGrid=function(){
   _origRenderGrid();
   attachHoverSound(grid);
 };
 
-/* ========== Register Service Worker ========== */
+/* ========== Service Worker ========== */
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('./sw.js').then(function(reg){

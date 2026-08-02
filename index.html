@@ -7,7 +7,19 @@
   <meta name="description" content="MCJS 镜像站启动器 - 全版本网页版 Minecraft，本地运行，无需跳转">
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-  <meta name="theme-color" content="#06060c">
+  <meta name="theme-color" content="#f0f2f5">
+  <style>
+    .version-grid { gap: var(--card-gap, 14px); }
+    .version-card { padding: var(--card-padding, 18px 20px 14px); }
+    body.no-anim *, body.no-anim *::before, body.no-anim *::after {
+      animation-duration: 0s !important;
+      transition-duration: 0s !important;
+    }
+    body.density-compact .group-header { margin-bottom: 8px; }
+    body.density-compact .version-sections { gap: 20px; }
+    body.density-spacious .group-header { margin-bottom: 18px; }
+    body.density-spacious .version-sections { gap: 40px; }
+  </style>
 </head>
 <body>
   <!-- Background layers -->
@@ -15,7 +27,7 @@
   <div class="bg-layer bg-overlay"></div>
   <div class="bg-layer bg-grid"></div>
 
-  <!-- Compatibility notice for non-WASM browsers -->
+  <!-- Compatibility notice -->
   <div id="wasmWarning" class="wasm-warning" style="display:none" role="alert">
     <div class="wasm-warning-content">
       <strong>提示</strong>
@@ -55,9 +67,8 @@
     </div>
   </div>
 
-  <!-- No-script fallback -->
   <noscript>
-    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:#fff;font-family:sans-serif;padding:20px;text-align:center;z-index:9999;">
+    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f0f2f5;color:#1a1d26;font-family:sans-serif;padding:20px;text-align:center;z-index:9999;">
       请启用 JavaScript 以使用 MCJS Launcher。
     </div>
   </noscript>
@@ -70,9 +81,9 @@
           <div class="logo-icon">
             <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
               <rect x="2" y="2" width="28" height="28" rx="4" fill="#fff" opacity="0.9"/>
-              <rect x="8" y="8" width="6" height="6" fill="#5cb85c"/>
-              <rect x="18" y="8" width="6" height="6" fill="#5cb85c"/>
-              <rect x="8" y="18" width="16" height="6" fill="#5cb85c"/>
+              <rect x="8" y="8" width="6" height="6" fill="#22c55e"/>
+              <rect x="18" y="8" width="6" height="6" fill="#22c55e"/>
+              <rect x="8" y="18" width="16" height="6" fill="#22c55e"/>
             </svg>
           </div>
           <div class="logo-text">
@@ -113,14 +124,12 @@
 
     <!-- Main -->
     <main class="main">
-      <!-- Search bar (kept minimal) -->
       <div class="filter-bar">
         <div class="search-box">
           <input type="text" id="searchInput" placeholder="搜索版本...">
         </div>
       </div>
 
-      <!-- Version grid (rendered by app.js, grouped like mcjs.cc) -->
       <div class="version-sections" id="versionSections"></div>
 
       <!-- FAQ -->
@@ -183,10 +192,10 @@
       <div class="modal-body">
         <p id="launchFailedMsg" style="margin-bottom:12px;font-size:0.88rem;color:var(--text-secondary);line-height:1.6;"></p>
         <p style="margin-bottom:8px;font-size:0.8rem;color:var(--text-muted);">您可以手动访问以下链接:</p>
-        <input type="text" id="launchFailedUrl" readonly style="width:100%;padding:8px 12px;border:1px solid var(--glass-border);border-radius:8px;font-family:var(--font-mono);font-size:0.78rem;background:var(--bg-card);">
+        <input type="text" id="launchFailedUrl" readonly style="width:100%;padding:8px 12px;border:1px solid var(--border-base);border-radius:8px;font-family:var(--font-mono);font-size:0.78rem;background:var(--bg-detail);color:var(--text-primary);">
         <div style="display:flex;gap:8px;margin-top:12px;">
           <button class="card-launch-btn" id="launchFailedCopy" style="flex:1;">复制链接</button>
-          <button class="card-launch-btn" id="launchFailedOpen" style="flex:1;background:var(--accent-blue);box-shadow:0 2px 8px rgba(59,143,194,0.25);">在新标签页打开</button>
+          <button class="card-launch-btn" id="launchFailedOpen" style="flex:1;background:var(--accent-blue);box-shadow:0 2px 8px rgba(59,130,246,0.25);">在新标签页打开</button>
         </div>
         <button class="action-btn" id="launchFailedRetry" style="margin-top:14px;">重试 (回到镜像选择)</button>
       </div>
@@ -202,6 +211,7 @@
         <button class="settings-close" id="settingsClose">&times;</button>
       </div>
       <div class="settings-body">
+        <!-- 启动设置 -->
         <div class="settings-group">
           <div class="settings-group-title">启动</div>
           <div class="setting-item">
@@ -211,11 +221,12 @@
             </div>
             <div class="setting-control">
               <select class="setting-select" id="settingMirror">
-                <option value="0">主站 (play.mcjs.cc)</option>
-                <option value="1">镜像 1 (pages.dev)</option>
-                <option value="2">镜像 2 (144449.xyz)</option>
-                <option value="3">镜像 3 (IPv6)</option>
-                <option value="4">镜像 4 (mirror)</option>
+                <option value="0">主站 (pages.dev)</option>
+                <option value="1">镜像 1 (144449.xyz)</option>
+                <option value="2">镜像 2 (IPv6)</option>
+                <option value="3">镜像 3 (mirror)</option>
+                <option value="4">镜像 4 (mirror-test)</option>
+                <option value="5">镜像 5 (备用)</option>
               </select>
             </div>
           </div>
@@ -228,8 +239,27 @@
               <button class="toggle" id="settingFullscreen" type="button" role="switch" aria-checked="false"></button>
             </div>
           </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>快速启动</span>
+              <small>跳过镜像选择直接启动</small>
+            </div>
+            <div class="setting-control">
+              <button class="toggle" id="settingQuickLaunch" type="button" role="switch" aria-checked="false"></button>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>加载详情</span>
+              <small>显示详细的加载步骤信息</small>
+            </div>
+            <div class="setting-control">
+              <button class="toggle active" id="settingLoadingDetail" type="button" role="switch" aria-checked="true"></button>
+            </div>
+          </div>
         </div>
 
+        <!-- 性能设置 -->
         <div class="settings-group">
           <div class="settings-group-title">性能</div>
           <div class="setting-item">
@@ -268,6 +298,7 @@
           </div>
         </div>
 
+        <!-- 存储设置 -->
         <div class="settings-group">
           <div class="settings-group-title">存储</div>
           <div class="setting-item">
@@ -296,10 +327,11 @@
             <div class="cache-info-row"><span>缓存文件</span><strong id="cacheFileCount"></strong></div>
           </div>
           <button class="action-btn" id="clearCacheBtn">清除游戏缓存</button>
-          <button class="action-btn" id="clearSaveBtn" style="margin-top:6px;">清除所有存档</button>
+          <button class="action-btn danger" id="clearSaveBtn" style="margin-top:6px;">清除所有存档</button>
           <button class="action-btn" id="resetOsGateBtn" style="margin-top:6px;">重新显示 OS 兼容性提示</button>
         </div>
 
+        <!-- 外观设置 -->
         <div class="settings-group">
           <div class="settings-group-title">外观</div>
           <div class="setting-item">
@@ -313,6 +345,47 @@
           </div>
           <div class="setting-item">
             <div class="setting-label">
+              <span>减少动态效果</span>
+              <small>关闭动画和过渡效果</small>
+            </div>
+            <div class="setting-control">
+              <button class="toggle" id="settingReduceMotion" type="button" role="switch" aria-checked="false"></button>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>字体大小</span>
+              <small>调整界面文字大小</small>
+            </div>
+            <div class="setting-control">
+              <select class="setting-select" id="settingFontSize">
+                <option value="small">小</option>
+                <option value="normal" selected>正常</option>
+                <option value="large">大</option>
+                <option value="xlarge">特大</option>
+              </select>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>卡片密度</span>
+              <small>版本卡片的间距和大小</small>
+            </div>
+            <div class="setting-control">
+              <select class="setting-select" id="settingCardDensity">
+                <option value="compact">紧凑</option>
+                <option value="comfortable" selected>舒适</option>
+                <option value="spacious">宽松</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 音效与辅助 -->
+        <div class="settings-group">
+          <div class="settings-group-title">音效与辅助</div>
+          <div class="setting-item">
+            <div class="setting-label">
               <span>音效</span>
               <small>启动器界面音效</small>
             </div>
@@ -320,18 +393,27 @@
               <button class="toggle active" id="settingSound" type="button" role="switch" aria-checked="true"></button>
             </div>
           </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>自动检查更新</span>
+              <small>启动时检查启动器更新</small>
+            </div>
+            <div class="setting-control">
+              <button class="toggle active" id="settingAutoUpdateCheck" type="button" role="switch" aria-checked="true"></button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Game Overlay (full-screen play area) -->
+  <!-- Game Overlay -->
   <div class="game-overlay" id="gameOverlay">
     <div class="game-toolbar" id="gameToolbar" style="display:none;">
       <div class="game-title" id="gameTitle">游戏</div>
       <div class="game-actions">
-        <button class="game-action-btn" id="gameFullscreenBtn" title="全屏" aria-label="全屏">⛶</button>
-        <button class="game-action-btn" id="gameCloseBtn" title="关闭" aria-label="关闭">×</button>
+        <button class="game-action-btn" id="gameFullscreenBtn" title="全屏" aria-label="全屏">&#9904;</button>
+        <button class="game-action-btn" id="gameCloseBtn" title="关闭" aria-label="关闭">&times;</button>
       </div>
     </div>
     <div class="game-container" id="gameContainer"></div>
