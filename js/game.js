@@ -20,7 +20,8 @@ var DEFAULT_SETTINGS={
   loadingDetail:true,
   keyboardPassthrough:true,
   quickLaunch:false,
-  reduceMotion:false
+  reduceMotion:false,
+  popupLaunch:false
 };
 
 function loadSettings(){
@@ -86,7 +87,6 @@ function buildWasmPolyfillScript() {
 (function() {
   console.log('[MCJS] WASM Polyfill loading...');
   
-  // 检测是否原生支持 WASM
   var hasNativeWasm = false;
   try {
     if (typeof WebAssembly !== 'undefined') {
@@ -98,7 +98,6 @@ function buildWasmPolyfillScript() {
     }
   } catch(e) {}
   
-  // 如果原生支持且支持 GC，不注入
   if (hasNativeWasm) {
     try {
       var gcTest = new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,1,123,1,123,3,2,1,0,5,3,1,0,2,7,9,1,5,95,109,97,105,110,0,0,10,10,1,8,0,65,0,250,10,11,11]);
@@ -112,7 +111,6 @@ function buildWasmPolyfillScript() {
   
   console.log('[MCJS] Injecting WASM polyfill...');
   
-  // ========== WASM 二进制解析器 ==========
   function readLEB128(bytes, offset) {
     var result = 0;
     var shift = 0;
@@ -131,7 +129,7 @@ function buildWasmPolyfillScript() {
   }
   
   function parseWasmSection(bytes, sectionId) {
-    var pos = 8; // 跳过魔数(4) + 版本(4)
+    var pos = 8;
     var sections = [];
     while (pos < bytes.length) {
       var id = bytes[pos++];
@@ -145,14 +143,13 @@ function buildWasmPolyfillScript() {
     return sections.find(function(s) { return s.id === sectionId; });
   }
   
-  // ========== 简易 WASM 运行时 ==========
   function WasmRuntime() {
     this.memory = null;
     this.functions = {};
     this.globals = {};
     this.exports = {};
     this.table = [];
-    this.memSize = 64; // 初始 64 页
+    this.memSize = 64;
   }
   
   WasmRuntime.prototype.allocMemory = function(initialPages, maxPages) {
@@ -199,14 +196,12 @@ function buildWasmPolyfillScript() {
     this.functions[name] = fn;
   };
   
-  // ========== 创建 WASM Polyfill ==========
   var wasmRuntime = null;
   
   function createWasmInstance(moduleBytes, imports) {
     var bytes = new Uint8Array(moduleBytes);
     wasmRuntime = new WasmRuntime();
     
-    // 注册导入函数
     var importObj = imports || {};
     if (importObj.env) {
       for (var key in importObj.env) {
@@ -216,14 +211,10 @@ function buildWasmPolyfillScript() {
       }
     }
     
-    // 解析类型 section (id: 1)
     var typeSection = parseWasmSection(bytes, 1);
-    // 解析函数 section (id: 3)
     var funcSection = parseWasmSection(bytes, 3);
-    // 解析内存 section (id: 5)
     var memSection = parseWasmSection(bytes, 5);
     
-    // 分配内存
     var memPages = 64;
     if (memSection) {
       var memData = memSection.data;
@@ -235,7 +226,6 @@ function buildWasmPolyfillScript() {
     }
     wasmRuntime.allocMemory(memPages);
     
-    // 解析导出 section (id: 7)
     var exportSection = parseWasmSection(bytes, 7);
     if (exportSection) {
       var data = exportSection.data;
@@ -245,7 +235,6 @@ function buildWasmPolyfillScript() {
       var expCount = expCountInfo.value || 0;
       
       for (var i = 0; i < expCount; i++) {
-        // 读取导出名称
         var nameLenInfo = readLEB128(data, expPos);
         expPos += nameLenInfo.length;
         var nameLen = nameLenInfo.value || 0;
@@ -258,27 +247,20 @@ function buildWasmPolyfillScript() {
         expPos += idxInfo.length;
         var idx = idxInfo.value || 0;
         
-        // 导出到 exports
-        if (kind === 0) { // function
+        if (kind === 0) {
           wasmRuntime.exports[name] = function() {
             return wasmRuntime.call(name, arguments);
           };
-        } else if (kind === 1) { // table
-          // 跳过
-        } else if (kind === 2) { // memory
+        } else if (kind === 2) {
           wasmRuntime.exports[name] = wasmRuntime.memory;
-        } else if (kind === 3) { // global
-          // 跳过
         }
       }
     }
     
-    // 模拟 main 函数
     if (imports && imports.env && imports.env._main) {
       wasmRuntime.register('_main', imports.env._main);
     }
     
-    // 创建实例对象
     var instance = {
       exports: wasmRuntime.exports || {},
       memory: wasmRuntime.memory,
@@ -291,20 +273,16 @@ function buildWasmPolyfillScript() {
     return instance;
   }
   
-  // ========== 替换 WebAssembly API ==========
   var _origInstantiate = window.WebAssembly && window.WebAssembly.instantiate ? 
     window.WebAssembly.instantiate : null;
   var _origInstantiateStreaming = window.WebAssembly && window.WebAssembly.instantiateStreaming ?
     window.WebAssembly.instantiateStreaming : null;
   
-  // 创建 WebAssembly 对象（如果不存在）
   if (typeof WebAssembly === 'undefined') {
     window.WebAssembly = {};
   }
   
-  // 重写 instantiate
   WebAssembly.instantiate = function(module, imports) {
-    // 如果是 BufferSource (WASM 二进制)
     if (module instanceof Uint8Array || module instanceof ArrayBuffer || 
         (module && module.buffer instanceof ArrayBuffer)) {
       
@@ -315,16 +293,13 @@ function buildWasmPolyfillScript() {
                      module.buffer ? new Uint8Array(module.buffer) : 
                      new Uint8Array(module);
         
-        // 验证 WASM 魔数
         if (bytes[0] !== 0x00 || bytes[1] !== 0x61 || 
             bytes[2] !== 0x73 || bytes[3] !== 0x6D) {
           throw new Error('Invalid WASM magic number');
         }
         
-        // 创建实例
         var instance = createWasmInstance(bytes, imports);
         
-        // 模拟 Module 对象
         var mockModule = {
           _bytes: bytes,
           _instance: instance
@@ -336,7 +311,6 @@ function buildWasmPolyfillScript() {
         });
       } catch(e) {
         console.error('[WASM Polyfill] Instantiate failed:', e);
-        // 如果原生支持，回退到原生
         if (_origInstantiate) {
           console.log('[WASM Polyfill] Falling back to native WASM');
           return _origInstantiate.apply(WebAssembly, arguments);
@@ -345,7 +319,6 @@ function buildWasmPolyfillScript() {
       }
     }
     
-    // 如果传入的是 Module 对象，尝试从缓存获取
     if (module && module._bytes) {
       try {
         var instance = createWasmInstance(module._bytes, imports);
@@ -358,7 +331,6 @@ function buildWasmPolyfillScript() {
       }
     }
     
-    // 如果原生支持，使用原生
     if (_origInstantiate) {
       return _origInstantiate.apply(WebAssembly, arguments);
     }
@@ -366,7 +338,6 @@ function buildWasmPolyfillScript() {
     return Promise.reject(new Error('WASM not supported and cannot polyfill'));
   };
   
-  // 重写 instantiateStreaming
   WebAssembly.instantiateStreaming = function(response, imports) {
     if (response && response.arrayBuffer) {
       return response.arrayBuffer().then(function(buffer) {
@@ -385,7 +356,6 @@ function buildWasmPolyfillScript() {
     return WebAssembly.instantiate(response, imports);
   };
   
-  // validate 方法
   WebAssembly.validate = function(bytes) {
     try {
       if (!bytes || bytes.length < 8) return false;
@@ -398,7 +368,6 @@ function buildWasmPolyfillScript() {
     }
   };
   
-  // 模拟 Module
   if (!WebAssembly.Module) {
     WebAssembly.Module = function(bytes) {
       if (!WebAssembly.validate(bytes)) {
@@ -409,7 +378,6 @@ function buildWasmPolyfillScript() {
     };
   }
   
-  // 模拟 Instance
   if (!WebAssembly.Instance) {
     WebAssembly.Instance = function(module, imports) {
       var bytes = module && module._bytes ? module._bytes : null;
@@ -422,7 +390,6 @@ function buildWasmPolyfillScript() {
     };
   }
   
-  // 模拟 Memory
   if (!WebAssembly.Memory) {
     WebAssembly.Memory = function(desc) {
       var size = desc.initial || 1;
@@ -436,14 +403,36 @@ function buildWasmPolyfillScript() {
 `;
 }
 
-/* ========== Cache Manager (IndexedDB) ========== */
+/* ========== Cache Manager (IndexedDB with Memory Fallback) ========== */
 var DB_NAME='mcjs_cache';
 var DB_VERSION=2;
 var STORE_GAME='game_files';
 var STORE_SAVE='save_data';
 var STORE_META='cache_meta';
+var _idbAvailable = null;
+var _memCache = { game_files: new Map(), save_data: new Map(), cache_meta: new Map() };
+
+function checkIDBAvailable(){
+  if(_idbAvailable !== null) return _idbAvailable;
+  try{
+    if(typeof indexedDB === 'undefined') { _idbAvailable = false; return false; }
+    var test = indexedDB.open('__mcjs_test__');
+    test.onerror = function(){ _idbAvailable = false; };
+    test.onsuccess = function(){
+      _idbAvailable = true;
+      try{ indexedDB.deleteDatabase('__mcjs_test__'); }catch(e){}
+    };
+    return true;
+  }catch(e){
+    _idbAvailable = false;
+    return false;
+  }
+}
 
 function openDB(){
+  if(!checkIDBAvailable()){
+    return Promise.reject(new Error('IndexedDB not available'));
+  }
   return new Promise(function(resolve,reject){
     var req=indexedDB.open(DB_NAME,DB_VERSION);
     req.onupgradeneeded=function(e){
@@ -453,11 +442,17 @@ function openDB(){
       if(!db.objectStoreNames.contains(STORE_META))db.createObjectStore(STORE_META);
     };
     req.onsuccess=function(e){resolve(e.target.result);};
-    req.onerror=function(e){reject(e.target.error);};
+    req.onerror=function(e){
+      _idbAvailable = false;
+      reject(e.target.error);
+    };
   });
 }
 
 function dbPut(store,key,value){
+  if(_idbAvailable === false){
+    try{ _memCache[store] = _memCache[store] || new Map(); _memCache[store].set(key, value); return Promise.resolve(); }catch(e){ return Promise.reject(e); }
+  }
   return openDB().then(function(db){
     return new Promise(function(resolve,reject){
       var tx=db.transaction(store,'readwrite');
@@ -465,10 +460,17 @@ function dbPut(store,key,value){
       tx.oncomplete=function(){resolve();};
       tx.onerror=function(e){reject(e.target.error);};
     });
+  }).catch(function(err){
+    console.warn('[MCJS] IndexedDB put failed, falling back to memory cache:', err.message);
+    _idbAvailable = false;
+    try{ _memCache[store] = _memCache[store] || new Map(); _memCache[store].set(key, value); return Promise.resolve(); }catch(e){ return Promise.reject(e); }
   });
 }
 
 function dbGet(store,key){
+  if(_idbAvailable === false){
+    try{ _memCache[store] = _memCache[store] || new Map(); return Promise.resolve(_memCache[store].get(key)); }catch(e){ return Promise.reject(e); }
+  }
   return openDB().then(function(db){
     return new Promise(function(resolve,reject){
       var tx=db.transaction(store,'readonly');
@@ -476,10 +478,17 @@ function dbGet(store,key){
       req.onsuccess=function(){resolve(req.result);};
       req.onerror=function(e){reject(e.target.error);};
     });
+  }).catch(function(err){
+    console.warn('[MCJS] IndexedDB get failed, falling back to memory cache:', err.message);
+    _idbAvailable = false;
+    try{ _memCache[store] = _memCache[store] || new Map(); return Promise.resolve(_memCache[store].get(key)); }catch(e){ return Promise.reject(e); }
   });
 }
 
 function dbDelete(store,key){
+  if(_idbAvailable === false){
+    try{ _memCache[store] = _memCache[store] || new Map(); _memCache[store].delete(key); return Promise.resolve(); }catch(e){ return Promise.reject(e); }
+  }
   return openDB().then(function(db){
     return new Promise(function(resolve,reject){
       var tx=db.transaction(store,'readwrite');
@@ -487,10 +496,17 @@ function dbDelete(store,key){
       tx.oncomplete=function(){resolve();};
       tx.onerror=function(e){reject(e.target.error);};
     });
+  }).catch(function(err){
+    console.warn('[MCJS] IndexedDB delete failed, falling back to memory cache:', err.message);
+    _idbAvailable = false;
+    try{ _memCache[store] = _memCache[store] || new Map(); _memCache[store].delete(key); return Promise.resolve(); }catch(e){ return Promise.reject(e); }
   });
 }
 
 function dbClear(store){
+  if(_idbAvailable === false){
+    try{ _memCache[store] = new Map(); return Promise.resolve(); }catch(e){ return Promise.reject(e); }
+  }
   return openDB().then(function(db){
     return new Promise(function(resolve,reject){
       var tx=db.transaction(store,'readwrite');
@@ -498,10 +514,17 @@ function dbClear(store){
       tx.oncomplete=function(){resolve();};
       tx.onerror=function(e){reject(e.target.error);};
     });
+  }).catch(function(err){
+    console.warn('[MCJS] IndexedDB clear failed, falling back to memory cache:', err.message);
+    _idbAvailable = false;
+    try{ _memCache[store] = new Map(); return Promise.resolve(); }catch(e){ return Promise.reject(e); }
   });
 }
 
 function dbKeys(store){
+  if(_idbAvailable === false){
+    try{ _memCache[store] = _memCache[store] || new Map(); return Promise.resolve(Array.from(_memCache[store].keys())); }catch(e){ return Promise.reject(e); }
+  }
   return openDB().then(function(db){
     return new Promise(function(resolve,reject){
       var tx=db.transaction(store,'readonly');
@@ -509,14 +532,23 @@ function dbKeys(store){
       req.onsuccess=function(){resolve(req.result||[]);};
       req.onerror=function(e){reject(e.target.error);};
     });
+  }).catch(function(err){
+    console.warn('[MCJS] IndexedDB keys failed, falling back to memory cache:', err.message);
+    _idbAvailable = false;
+    try{ _memCache[store] = _memCache[store] || new Map(); return Promise.resolve(Array.from(_memCache[store].keys())); }catch(e){ return Promise.reject(e); }
   });
 }
 
 /* ========== Memory Optimizer ========== */
-function optimizeMemory(callback){
+var _memOptCancelToken = { cancelled: false };
+function cancelMemoryOpt(){
+  _memOptCancelToken.cancelled = true;
+}
+function optimizeMemory(callback, forceDetail){
+  _memOptCancelToken = { cancelled: false };
   var settings=window.MCJS_SETTINGS||{};
   var doClean=settings.autoClean!==false;
-  var showDetail=settings.loadingDetail!==false;
+  var showDetail=(forceDetail === true) || (settings.loadingDetail!==false);
 
   var steps=showDetail?[
     {text:'释放闲置内存...',pct:10,clean:true},
@@ -533,6 +565,10 @@ function optimizeMemory(callback){
 
   var i=0;
   function next(){
+    if(_memOptCancelToken.cancelled){
+      if(callback){try{callback();}catch(e){}}
+      return;
+    }
     if(i>=steps.length){
       if(callback){try{callback();}catch(e){console.warn('[MCJS] optimizeMemory callback error:',e);}}
       return;
@@ -547,6 +583,7 @@ function optimizeMemory(callback){
     try{
       if(doClean&&step.clean&&step.pct<=25){
         if(typeof gc==='function'){try{gc();}catch(e){}}
+        if(typeof window.gc==='function'){try{window.gc();}catch(e){}}
       }
       if(step.alloc){
         var limit=settings.memoryLimit||512;
@@ -561,7 +598,55 @@ function optimizeMemory(callback){
       console.warn('[MCJS] optimizeMemory step error (non-fatal):',e);
     }
 
-    setTimeout(next,doClean?(200+Math.random()*300):(100+Math.random()*100));
+    if(!_memOptCancelToken.cancelled){
+      setTimeout(next,doClean?(200+Math.random()*300):(100+Math.random()*100));
+    }
+  }
+  next();
+}
+
+/* ========== 手动内存优化（外部调用） ========== */
+function manualOptimizeMemory(onProgress, onComplete) {
+  var settings = window.MCJS_SETTINGS || {};
+  var doClean = settings.autoClean !== false;
+  var steps = [
+    { text: '正在释放内存...', pct: 15, clean: true },
+    { text: '清理缓存引用...', pct: 30, clean: true },
+    { text: '执行垃圾回收...', pct: 50, clean: true },
+    { text: '优化堆内存...', pct: 70, clean: true },
+    { text: '完成优化', pct: 100 }
+  ];
+  
+  if (!doClean) {
+    steps = steps.filter(function(s) { return !s.clean; });
+    if (steps.length === 0) {
+      steps = [{ text: '内存优化已禁用（设置中开启"启动前内存优化"）', pct: 100 }];
+    }
+  }
+  
+  var i = 0;
+  function next() {
+    if (i >= steps.length) {
+      if (onComplete) onComplete();
+      return;
+    }
+    var step = steps[i++];
+    if (onProgress) onProgress(step.text, step.pct);
+    
+    try {
+      if (step.clean && doClean) {
+        if (typeof gc === 'function') { try { gc(); } catch(e) {} }
+        if (typeof window.gc === 'function') { try { window.gc(); } catch(e) {} }
+        try {
+          var pool = new ArrayBuffer(16 * 1024 * 1024);
+          pool = null;
+        } catch(e) {}
+      }
+    } catch(e) {
+      console.warn('[MCJS] Manual optimize step error:', e);
+    }
+    
+    setTimeout(next, 150 + Math.random() * 200);
   }
   next();
 }
@@ -723,26 +808,40 @@ function buildHostJS(){
   ].join('');
 }
 
-function injectIntoHTML(html, scripts, baseURL) {
+function injectIntoHTML(html, scripts, baseURL, pluginInjects) {
+  // pluginInjects: [{type:'js'|'css', content:string, pluginId:string}] - 来自插件的额外注入
+  pluginInjects = pluginInjects || [];
+
   var baseTag = baseURL ? '<base href="' + escapeAttr(baseURL) + '">' : '';
   var hostCSS = '<style data-mcjs-host>' + buildHostCSS() + '</style>';
   var hostJS = '<script data-mcjs-host>' + buildHostJS() + '<\/script>';
-  
-  // 关键：如果浏览器不支持 WASM，注入 polyfill
+
+  // 原始 WASM 兼容逻辑保留为兜底(无插件时仍能跑)
   var wasmPolyfillScript = '';
   if (needsWasmFallback()) {
     wasmPolyfillScript = '<script>' + buildWasmPolyfillScript() + '<\/script>';
     console.log('[MCJS] WASM polyfill injected into game page');
   }
-  
+
   var scriptsTag = '';
   for (var i = 0; i < scripts.length; i++) {
     scriptsTag += '<script>' + scripts[i] + '<\/script>';
   }
-  
-  // 注入顺序：polyfill 最先执行
-  var injection = baseTag + hostCSS + wasmPolyfillScript + hostJS + scriptsTag;
-  
+
+  // 注入插件提供的 CSS 与 JS(在 hostJS 之后执行)
+  var pluginCSS = '';
+  var pluginJS = '';
+  for (var j = 0; j < pluginInjects.length; j++) {
+    var item = pluginInjects[j];
+    if (item.type === 'css') {
+      pluginCSS += '<style data-mcjs-plugin="' + escapeAttr(item.pluginId || '') + '">' + item.content + '</style>';
+    } else {
+      pluginJS += '<script data-mcjs-plugin="' + escapeAttr(item.pluginId || '') + '">' + item.content + '<\/script>';
+    }
+  }
+
+  var injection = baseTag + hostCSS + wasmPolyfillScript + hostJS + scriptsTag + pluginCSS + pluginJS;
+
   if (html.indexOf('<head>') !== -1) {
     return html.replace('<head>', '<head>' + injection);
   }
@@ -822,9 +921,50 @@ var lastLaunchedVersion=null;
 
 function launchGame(version,onProgress,onReady,onError){
   var settings=window.MCJS_SETTINGS;
-  var rawMirror=version.mirrors[settings.mirrorIndex]||version.mirrors[0];
+  var mirrorIdx = settings.mirrorIndex;
+  if(mirrorIdx < 0 || mirrorIdx >= version.mirrors.length) {
+    mirrorIdx = 0;
+    settings.mirrorIndex = 0;
+    try{ window.MCJS_SAVE_SETTINGS(settings); }catch(e){}
+  }
+  var rawMirror=version.mirrors[mirrorIdx];
   var mirrorURL=buildMirrorURL(rawMirror,version);
   lastLaunchedVersion=version;
+
+  // ========== 插件 hook:launch:version - 允许插件修改 version 对象 ==========
+  if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
+    try {
+      var modifiedVersion = window.MCJS_PLUGIN_API._internal.runHook('launch:version', JSON.parse(JSON.stringify(version)));
+      if (modifiedVersion && typeof modifiedVersion === 'object') {
+        version = modifiedVersion;
+        if (window.MCJS_LAUNCH_CONTEXT === undefined) {
+          window.MCJS_LAUNCH_CONTEXT = { version: version, mirrorURL: mirrorURL };
+        }
+      }
+    } catch (e) { console.warn('[MCJS] launch:version hook error:', e); }
+  }
+
+  // ========== 插件 hook:launch:mirrors - 允许插件增删镜像 ==========
+  if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
+    try {
+      var modifiedMirrors = window.MCJS_PLUGIN_API._internal.runHook('launch:mirrors', version.mirrors, version);
+      if (Array.isArray(modifiedMirrors) && modifiedMirrors.length > 0) {
+        version = Object.assign({}, version, { mirrors: modifiedMirrors });
+        // 重新选择镜像
+        if (mirrorIdx >= version.mirrors.length) mirrorIdx = 0;
+        rawMirror = version.mirrors[mirrorIdx];
+        mirrorURL = buildMirrorURL(rawMirror, version);
+      }
+    } catch (e) { console.warn('[MCJS] launch:mirrors hook error:', e); }
+  }
+
+  window.MCJS_LAUNCH_CONTEXT = { version: version, mirrorURL: mirrorURL, startedAt: Date.now() };
+
+  // ========== 插件 hook:launch:before ==========
+  if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
+    try { window.MCJS_PLUGIN_API._internal.runHook('launch:before', version); } catch (e) {}
+  }
+  if (window.MCJS_EVENTS) try { window.MCJS_EVENTS.emit('launch:start', { version: version, mirrorURL: mirrorURL }); } catch (e) {}
 
   try{onProgress('正在优化内存...',5);}catch(e){}
 
@@ -839,8 +979,19 @@ function launchGame(version,onProgress,onReady,onError){
       }
       try{onProgress('正在从 '+rawMirror.name+' 下载游戏文件...',40);}catch(e){}
 
-      fetchGameHTML(mirrorURL).then(function(html){
+      fetchGameHTML(mirrorURL).then(function(rawHtml){
         try{onProgress('解压游戏源代码...',65);}catch(e){}
+        // ========== 插件 hook:launch:html - 允许插件修改游戏 HTML ==========
+        var html = rawHtml;
+        if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
+          try {
+            var mod = window.MCJS_PLUGIN_API._internal.runHook('launch:html', rawHtml, { version: version, mirrorURL: mirrorURL });
+            if (typeof mod === 'string' && mod.length > 0) html = mod;
+          } catch (e) { console.warn('[MCJS] launch:html hook error:', e); }
+        }
+        // 收集插件注入项
+        var pluginInjects = collectPluginInjects('launch:html');
+
         var scripts=[];
         var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(settings.memoryLimit)+';';
         scripts.push(memCode);
@@ -848,7 +999,7 @@ function launchGame(version,onProgress,onReady,onError){
           var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
           scripts.push(saveCode);
         }
-        var modifiedHTML=injectIntoHTML(html,scripts,mirrorURL);
+        var modifiedHTML=injectIntoHTML(html,scripts,mirrorURL,pluginInjects);
         try{onProgress('缓存游戏文件...',75);}catch(e){}
         cacheGameFiles(version.id,modifiedHTML,mirrorURL).catch(function(e){
           console.warn('[MCJS] Cache failed:',e);
@@ -861,14 +1012,53 @@ function launchGame(version,onProgress,onReady,onError){
     }).catch(function(err){
       console.warn('[MCJS] DB error:',err);
       deleteCachedHTML(version.id).catch(function(){});
-      fetchGameHTML(mirrorURL).then(function(html){
-        var modifiedHTML=injectIntoHTML(html,[],mirrorURL);
+      fetchGameHTML(mirrorURL).then(function(rawHtml){
+        var html = rawHtml;
+        if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
+          try {
+            var mod = window.MCJS_PLUGIN_API._internal.runHook('launch:html', rawHtml, { version: version, mirrorURL: mirrorURL });
+            if (typeof mod === 'string' && mod.length > 0) html = mod;
+          } catch (e) {}
+        }
+        var pluginInjects = collectPluginInjects('launch:html');
+        var modifiedHTML=injectIntoHTML(html,[],mirrorURL,pluginInjects);
         loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady,onError);
       }).catch(function(err2){
         tryFallbackMirror(version,0,onProgress,onReady,onError,err2);
       });
     });
   });
+}
+
+/* 收集由插件生成的待注入项(JS / CSS)
+   直接调用每个已启用插件实例的 inject() 接口,
+   plugin.inject({hook: 'launch:html', args: ...}) 应返回 {type, content} 或 null */
+function collectPluginInjects(hookName) {
+  var out = [];
+  // 1. 直接遍历插件实例调用 inject
+  var instances = window.__MCJS_PLUGIN_INSTANCES__ || {};
+  Object.keys(instances).forEach(function(pluginId) {
+    var inst = instances[pluginId];
+    var plugin = window.MCJS_REGISTRY ? window.MCJS_REGISTRY.get(pluginId) : null;
+    if (!inst || typeof inst.inject !== 'function') return;
+    if (plugin && plugin.hooks && plugin.hooks.indexOf(hookName) === -1) return;
+    try {
+      var result = inst.inject({ hook: hookName, args: null });
+      if (result && result.content) {
+        out.push({
+          pluginId: pluginId,
+          type: result.type || 'js',
+          content: result.content
+        });
+      }
+    } catch (e) { console.warn('[MCJS] Plugin inject call failed:', pluginId, e); }
+  });
+  // 2. 兼容旧机制:从全局队列中拉取
+  if (window.__MCJS_PENDING_INJECTS__ && window.__MCJS_PENDING_INJECTS__.length) {
+    out = out.concat(window.__MCJS_PENDING_INJECTS__);
+    window.__MCJS_PENDING_INJECTS__ = [];
+  }
+  return out;
 }
 
 function tryFallbackMirror(version,startIndex,onProgress,onReady,onError,lastErr){
@@ -970,6 +1160,36 @@ function loadGameInFrame(version,html,mirrorURL,onProgress,onReady,onError){
     return;
   }
 
+  // 收集 launch:after 钩子的注入内容(在游戏加载后注入)
+  try {
+    var afterInjects = collectPluginInjects('launch:after');
+    if (afterInjects.length > 0) {
+      setTimeout(function(){
+        try {
+          afterInjects.forEach(function(item) {
+            if (item.type === 'css') {
+              var s = doc.createElement('style');
+              s.setAttribute('data-mcjs-plugin', item.pluginId || '');
+              s.textContent = item.content;
+              doc.head.appendChild(s);
+            } else {
+              var sc = doc.createElement('script');
+              sc.setAttribute('data-mcjs-plugin', item.pluginId || '');
+              sc.textContent = item.content;
+              doc.head.appendChild(sc);
+            }
+          });
+        } catch (e) { console.warn('[MCJS] launch:after inject failed:', e); }
+      }, 50);
+    }
+  } catch (e) {}
+
+  // 触发 launch:after 钩子
+  if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
+    try { window.MCJS_PLUGIN_API._internal.runHook('launch:after', { version: version, iframe: iframe }); } catch (e) {}
+  }
+  if (window.MCJS_EVENTS) try { window.MCJS_EVENTS.emit('game:ready', { version: version, iframe: iframe }); } catch (e) {}
+
   try{onProgress('启动完成',100);}catch(e){}
 
   setTimeout(function(){
@@ -986,6 +1206,13 @@ function loadGameInFrame(version,html,mirrorURL,onProgress,onReady,onError){
 }
 
 function closeGame(){
+  if (currentIframe) {
+    // 触发 game:close 钩子
+    if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
+      try { window.MCJS_PLUGIN_API._internal.runHook('game:close', { version: lastLaunchedVersion }); } catch (e) {}
+    }
+    if (window.MCJS_EVENTS) try { window.MCJS_EVENTS.emit('game:close', { version: lastLaunchedVersion }); } catch (e) {}
+  }
   if(currentIframe){
     try{currentIframe.contentDocument.close();}catch(e){}
     try{currentIframe.parentNode&&currentIframe.parentNode.removeChild(currentIframe);}catch(e){}
@@ -1055,6 +1282,7 @@ function formatBytes(bytes){
 window.MCJS_GAME={
   launch:launchGame,
   close:closeGame,
+  cancel:cancelMemoryOpt,
   getCacheSize:getCacheSize,
   clearCache:clearGameCache,
   clearSaveData:clearSaveData,
@@ -1063,7 +1291,9 @@ window.MCJS_GAME={
   buildMirrorURL:buildMirrorURL,
   detectWasmSupport:detectWasmSupport,
   needsWasmFallback:needsWasmFallback,
-  buildWasmPolyfillScript:buildWasmPolyfillScript
+  buildWasmPolyfillScript:buildWasmPolyfillScript,
+  manualOptimize: manualOptimizeMemory,
+  optimizeMemory: optimizeMemory
 };
 
 })();

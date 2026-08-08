@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
-  <title>MCJS Launcher — Eaglercraft 全版本启动器</title>
-  <meta name="description" content="MCJS 镜像站启动器 · 全版本网页版 Minecraft，本地运行，无需跳转" />
+  <title>MCJS Launcher — Eaglercraft 全版本启动器 v3.0</title>
+  <meta name="description" content="MCJS 镜像站启动器 · 全版本网页版 Minecraft，本地运行，无需跳转 · 内置插件市场" />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
   <meta name="theme-color" content="#f0f2f5" />
@@ -19,7 +19,8 @@
   <div id="wasmWarning" class="wasm-warning" style="display:none" role="alert">
     <div class="wasm-warning-content">
       <strong>兼容性回退模式</strong>
-      <span id="wasmWarningText">您的浏览器不支持 WebAssembly，启动时将自动使用兼容模式（性能可能下降）</span>
+      <span id="wasmWarningText">您的浏览器不支持 WebAssembly，可前往插件市场安装 WASM Polyfill 插件以获得兼容支持</span>
+      <button class="wasm-warning-action" id="wasmWarningAction">前往插件市场</button>
       <button class="wasm-warning-close" id="wasmWarningClose" aria-label="关闭">&times;</button>
     </div>
   </div>
@@ -72,11 +73,32 @@
           </div>
           <div class="logo-text">
             <h1>MCJS Launcher</h1>
-            <span class="subtitle">Eaglercraft 全版本启动器</span>
+            <span class="subtitle">Eaglercraft 全版本启动器 · v3.0</span>
           </div>
         </div>
         <div class="header-actions">
-          <button class="settings-btn" id="settingsBtn" title="设置 (Ctrl+,)" aria-label="设置">⚙</button>
+          <button class="header-btn" id="pluginMarketBtn" title="插件市场" aria-label="插件市场">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
+            <span class="header-btn-label">插件</span>
+          </button>
+          <button class="header-btn" id="pluginEditorBtn" title="插件编写器" aria-label="插件编写器">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 18 22 12 16 6"/>
+              <polyline points="8 6 2 12 8 18"/>
+            </svg>
+            <span class="header-btn-label">编写</span>
+          </button>
+          <button class="header-btn" id="settingsBtn" title="设置 (Ctrl+,)" aria-label="设置">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span class="header-btn-label">设置</span>
+          </button>
         </div>
       </div>
     </header>
@@ -87,59 +109,100 @@
         <h1 class="hero-title">MCJS Launcher</h1>
         <p class="hero-subtitle">Eaglercraft 全版本启动器 · 网页版 Minecraft 镜像</p>
         <h2 class="hero-headline">无需下载，直接在浏览器中畅玩 Minecraft</h2>
-        <p class="hero-subhead">Eaglercraft 简体中文优化版本<br />最全面的 Eaglercraft 版本整合平台</p>
+        <p class="hero-subhead">Eaglercraft 简体中文优化版本<br />最全面的 Eaglercraft 版本整合平台 · 现已支持插件扩展</p>
         <p class="hero-tags">
           <span>完全免费</span><i>|</i><span>无广告干扰</span><i>|</i>
-          <span>全平台兼容</span><i>|</i><span>多版本支持</span><i>|</i><span>中文语言优化</span>
+          <span>全平台兼容</span><i>|</i><span>多版本支持</span><i>|</i><span>插件市场</span>
         </p>
         <p class="hero-tags hero-tags-muted">
           <span>材质包</span><i>|</i><span>光影包</span><i>|</i>
-          <span>模组整合</span><i>|</i><span>免费远程联机</span>
+          <span>模组整合</span><i>|</i><span>免费远程联机</span><i>|</i><span>自写插件</span>
         </p>
+        <div class="hero-cta">
+          <button class="hero-cta-btn primary" id="openPluginMarket">浏览插件市场</button>
+          <button class="hero-cta-btn" id="openPluginDocs">查看插件开发文档</button>
+        </div>
       </div>
       <div class="hero-right">
         <div class="search-box">
-          <input type="text" id="searchInput" placeholder="搜索版本…" />
+          <input type="text" id="searchInput" placeholder="搜索版本…" aria-label="搜索版本" />
+          <button id="searchClearBtn" class="search-clear-btn" aria-label="清空搜索" style="display:none;" type="button">&times;</button>
         </div>
       </div>
     </section>
 
     <!-- 主内容 -->
     <main class="main">
-      <div class="version-sections" id="versionSections"></div>
+      <div class="version-sections" id="versionSections">
+        <!-- 加载骨架屏 -->
+        <div id="loadingSkeleton" class="loading-skeleton">
+          <div class="skeleton-group">
+            <div class="skeleton-header"></div>
+            <div class="skeleton-grid">
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+            </div>
+          </div>
+          <div class="skeleton-group">
+            <div class="skeleton-header"></div>
+            <div class="skeleton-grid">
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 已安装插件面板 -->
+      <section class="installed-plugins-section" id="installedPluginsSection" style="display:none;">
+        <header class="section-header">
+          <h2>已启用的插件</h2>
+          <span class="section-sub" id="installedPluginsCount">0 个插件</span>
+          <button class="section-link" id="managePluginsBtn">管理 →</button>
+        </header>
+        <div class="installed-plugins-list" id="installedPluginsList"></div>
+      </section>
 
       <!-- FAQ -->
       <section class="faq-section">
         <h2>常见问题</h2>
         <div class="faq-item">
-          <div class="q">游戏打不开、卡死或崩溃怎么办？</div>
-          <div class="a">请使用最新版 <span class="hl">Google Chrome</span> 浏览器。推荐使用 WASM 版本以获得最佳性能。设备建议使用性能较好的电脑。本站已内置 JSPI 兼容处理，大部分现代浏览器均可正常运行。</div>
+          <div class="faq-question">游戏打不开、卡死或崩溃怎么办？</div>
+          <div class="faq-answer">请使用最新版 <span class="hl">Google Chrome</span> 浏览器。推荐使用 WASM 版本以获得最佳性能。设备建议使用性能较好的电脑。前往 <span class="hl">插件市场</span> 安装「JSPI 兼容」「WASM 增强」等插件可大幅提升兼容性。</div>
         </div>
         <div class="faq-item">
-          <div class="q">游戏存档会丢失吗？</div>
-          <div class="a">本站使用 <span class="hl">IndexedDB 隔离存储</span>，每个版本的存档独立保存。但由于浏览器缓存限制，存档可能被自动清理。<span class="hl">建议定期手动备份存档</span>。</div>
+          <div class="faq-question">游戏存档会丢失吗？</div>
+          <div class="faq-answer">本站使用 <span class="hl">IndexedDB 隔离存储</span>，每个版本的存档独立保存。但由于浏览器缓存限制，存档可能被自动清理。<span class="hl">建议定期手动备份存档</span>。</div>
         </div>
         <div class="faq-item">
-          <div class="q">多人游戏如何联机？</div>
-          <div class="a">
+          <div class="faq-question">插件市场是什么？如何使用？</div>
+          <div class="faq-answer">插件市场是 MCJS v3.0 新增的功能中心。所有兼容性增强、注入代码、性能优化均通过 <span class="hl">插件</span> 实现。你可以从市场安装官方插件，或自己编写/导入第三方插件。详细文档请见 <span class="hl">插件开发文档</span>。</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-question">多人游戏如何联机？</div>
+          <div class="faq-answer">
             <span class="hl">单机模式</span>：单人游玩，无需网络连接。<br />
             <span class="hl">局域网联机</span>：同一网络下，房主开启"共享世界"，其他设备在"多人游戏"中自动发现房间。<br />
             <span class="hl">远程联机</span>：房主开启"共享世界"生成邀请码，其他设备输入邀请码即可直连。
           </div>
         </div>
         <div class="faq-item">
-          <div class="q">手机或平板能玩吗？</div>
-          <div class="a"><span class="hl">仅 1.8.8 版本</span> 支持移动触屏设备。其他版本仅支持电脑端操作。</div>
+          <div class="faq-question">手机或平板能玩吗？</div>
+          <div class="faq-answer"><span class="hl">仅 1.8.8 版本</span> 支持移动触屏设备。其他版本仅支持电脑端操作。</div>
         </div>
         <div class="faq-item">
-          <div class="q">新版本（1.16.5 / 1.21.11 / 26.1.2）稳定吗？</div>
-          <div class="a">这些是 <span class="warn">非常早期的测试版本</span>，稳定性不足且存在较多缺陷。高版本对设备性能要求较高，<span class="warn">仅 WASM 版本可用</span>，建议在高性能设备上运行。</div>
+          <div class="faq-question">新版本（1.16.5 / 1.21.11 / 26.1.2）稳定吗？</div>
+          <div class="faq-answer">这些是 <span class="warn">非常早期的测试版本</span>，稳定性不足且存在较多缺陷。高版本对设备性能要求较高，<span class="warn">仅 WASM 版本可用</span>，建议在高性能设备上运行。</div>
         </div>
       </section>
     </main>
 
     <footer class="footer">
-      <p>MCJS Launcher 是基于 Eaglercraft 的社区启动器</p>
+      <p>MCJS Launcher 是基于 Eaglercraft 的社区启动器 · v3.0 内置插件市场</p>
       <p>游戏文件来源于公共 CDN 镜像，与 Minecraft、Mojang 无任何从属关系</p>
     </footer>
   </div>
@@ -188,12 +251,157 @@
     </div>
   </div>
 
+  <!-- 插件市场弹窗 -->
+  <div class="modal-overlay" id="pluginMarketModal">
+    <div class="modal modal-plugin-market">
+      <div class="modal-header">
+        <h2>插件市场</h2>
+        <div class="plugin-market-tabs">
+          <button class="plugin-tab active" data-tab="browse">浏览</button>
+          <button class="plugin-tab" data-tab="installed">已安装</button>
+          <button class="plugin-tab" data-tab="updates">更新</button>
+          <button class="plugin-tab" data-tab="remote">远程仓库</button>
+          <button class="plugin-tab" data-tab="docs">开发文档</button>
+        </div>
+        <button class="modal-close" id="pluginMarketClose" aria-label="关闭">&times;</button>
+      </div>
+      <div class="modal-body plugin-market-body">
+        <!-- 浏览标签 -->
+        <div class="plugin-pane active" data-pane="browse">
+          <div class="plugin-toolbar">
+            <div class="plugin-search">
+              <input type="text" id="pluginSearchInput" placeholder="搜索插件..." />
+            </div>
+            <div class="plugin-categories" id="pluginCategories"></div>
+            <div class="plugin-toolbar-actions">
+              <button class="plugin-btn" id="importPluginBtn">📁 导入文件</button>
+              <button class="plugin-btn primary" id="refreshPluginMarket">刷新列表</button>
+            </div>
+          </div>
+          <div class="plugin-url-import">
+            <input type="text" id="pluginURLInput" placeholder="从 URL 导入: https://... 或 GitHub raw 链接" />
+            <button class="plugin-btn" id="importFromURLBtn">从 URL 导入</button>
+          </div>
+          <div class="plugin-list" id="pluginList"></div>
+        </div>
+        <!-- 已安装标签 -->
+        <div class="plugin-pane" data-pane="installed">
+          <div class="plugin-list" id="installedPluginList"></div>
+        </div>
+        <!-- 更新标签 -->
+        <div class="plugin-pane" data-pane="updates">
+          <div class="plugin-list" id="updatesPluginList"></div>
+        </div>
+        <!-- 远程仓库标签 -->
+        <div class="plugin-pane" data-pane="remote">
+          <div class="plugin-toolbar">
+            <div class="plugin-search">
+              <input type="text" id="pluginRemoteSearchInput" placeholder="搜索远程插件..." />
+            </div>
+            <div class="plugin-categories plugin-remote-sources" id="remoteSourceSelector"></div>
+          </div>
+          <div class="plugin-list" id="remotePluginList"></div>
+        </div>
+        <!-- 开发文档标签 -->
+        <div class="plugin-pane" data-pane="docs">
+          <div class="plugin-docs" id="pluginDocsContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 插件编写器弹窗 -->
+  <div class="modal-overlay" id="pluginEditorModal">
+    <div class="modal modal-plugin-editor">
+      <div class="modal-header">
+        <h2 id="pluginEditorTitle">插件编写器</h2>
+        <div class="plugin-editor-toolbar">
+          <button class="plugin-btn small" id="newPluginBtn">新建</button>
+          <button class="plugin-btn small" id="savePluginBtn">保存</button>
+          <button class="plugin-btn small" id="testPluginBtn">测试</button>
+          <button class="plugin-btn small" id="formatPluginBtn">格式化</button>
+          <button class="plugin-btn small" id="exportPluginBtn">导出</button>
+        </div>
+        <button class="modal-close" id="pluginEditorClose" aria-label="关闭">&times;</button>
+      </div>
+      <div class="modal-body plugin-editor-body">
+        <div class="plugin-editor-sidebar">
+          <div class="plugin-editor-section">
+            <label>插件名称</label>
+            <input type="text" id="pluginMetaName" placeholder="我的插件" />
+          </div>
+          <div class="plugin-editor-section">
+            <label>版本</label>
+            <input type="text" id="pluginMetaVersion" placeholder="1.0.0" />
+          </div>
+          <div class="plugin-editor-section">
+            <label>作者</label>
+            <input type="text" id="pluginMetaAuthor" placeholder="Anonymous" />
+          </div>
+          <div class="plugin-editor-section">
+            <label>分类</label>
+            <select id="pluginMetaCategory">
+              <option value="compatibility">兼容性</option>
+              <option value="performance">性能</option>
+              <option value="appearance">外观</option>
+              <option value="utility">工具</option>
+              <option value="language">语言</option>
+              <option value="custom">自定义</option>
+            </select>
+          </div>
+          <div class="plugin-editor-section">
+            <label>描述</label>
+            <textarea id="pluginMetaDescription" rows="3" placeholder="插件功能简述"></textarea>
+          </div>
+          <div class="plugin-editor-section">
+            <label>钩子点 (Hook Points)</label>
+            <div class="hook-list" id="hookList"></div>
+          </div>
+          <div class="plugin-editor-section">
+            <label>权限</label>
+            <div class="permission-list" id="permissionList"></div>
+          </div>
+          <div class="plugin-editor-section">
+            <label>代码模板</label>
+            <select id="pluginTemplate">
+              <option value="">-- 选择模板 --</option>
+              <option value="inject-script">注入脚本 (Inject Script)</option>
+              <option value="inject-css">注入 CSS (Inject CSS)</option>
+              <option value="modify-launch">修改启动参数 (Modify Launch)</option>
+              <option value="patch-mirror">修改镜像列表 (Patch Mirror)</option>
+              <option value="ui-extension">UI 扩展 (UI Extension)</option>
+              <option value="hook-event">事件钩子 (Hook Event)</option>
+            </select>
+            <button class="plugin-btn small" id="applyTemplateBtn" style="margin-top:6px;">应用模板</button>
+          </div>
+        </div>
+        <div class="plugin-editor-main">
+          <div class="plugin-editor-tabs">
+            <button class="editor-tab active" data-file="main.js">main.js</button>
+            <button class="editor-tab" data-file="inject.js">inject.js</button>
+            <button class="editor-tab" data-file="style.css">style.css</button>
+            <button class="editor-tab" data-file="config.json">config.json</button>
+            <button class="editor-tab" data-file="manifest.json">manifest.json</button>
+          </div>
+          <div class="plugin-code-wrap">
+            <pre id="pluginCodeHighlight" class="plugin-code-highlight lang-js" aria-hidden="true"></pre>
+            <textarea id="pluginCodeEditor" class="plugin-code-editor" spellcheck="false"></textarea>
+          </div>
+          <div class="plugin-editor-output">
+            <div class="output-header">测试输出</div>
+            <pre id="pluginTestOutput" class="output-content"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 游戏容器（浅色毛玻璃） -->
   <div class="game-overlay" id="gameOverlay">
     <div class="game-toolbar" id="gameToolbar" style="display:none;">
       <div class="game-title" id="gameTitle">游戏</div>
       <div class="game-actions">
-        <button class="game-action-btn" id="gameFullscreenBtn" title="全屏" aria-label="全屏">⛶</button>
+        <button class="game-action-btn" id="gameFullscreenBtn" title="全屏" aria-label="全屏">&#8863;</button>
         <button class="game-action-btn" id="gameCloseBtn" title="关闭" aria-label="关闭">&times;</button>
       </div>
     </div>
@@ -207,8 +415,18 @@
     </div>
   </div>
 
+  <!-- Toast 通知 -->
+  <div class="toast-container" id="toastContainer"></div>
+
   <script src="js/versions.js"></script>
   <script src="js/game.js"></script>
+  <script src="js/plugin-api.js"></script>
+  <script src="js/plugin-registry.js"></script>
+  <script src="js/plugin-market.js"></script>
+  <script src="js/plugin-editor.js"></script>
   <script src="js/app.js"></script>
+
+  <!-- 无障碍 aria-live 区域 -->
+  <div aria-live="polite" class="sr-only" id="liveRegion"></div>
 </body>
 </html>

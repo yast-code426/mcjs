@@ -1,0 +1,28 @@
+{
+  "name": "MCJS 示例第三方市场",
+  "description": "演示如何发布一个符合 MCJS 协议的远程插件市场。本文件应放在任何 HTTPS 可访问的位置,然后在「远程仓库」标签中点击 ➕ 添加仓库 订阅。",
+  "version": "1.0.0",
+  "homepage": "https://github.com/example/mcjs-market",
+  "plugins": [
+    {
+      "id": "example.greet-plugin",
+      "name": "问候语插件(示例)",
+      "version": "1.0.0",
+      "author": "Example Author",
+      "category": "utility",
+      "description": "在游戏页面上方显示一条欢迎横幅(示例插件)",
+      "icon": "👋",
+      "url": "https://raw.githubusercontent.com/example/mcjs-market/main/plugins/greet-plugin.json"
+    },
+    {
+      "id": "example.fps-monitor",
+      "name": "FPS 监控(示例)",
+      "version": "0.9.0",
+      "author": "Example Author",
+      "category": "performance",
+      "description": "在游戏中显示当前 FPS(示例插件)",
+      "icon": "📊",
+      "url": "https://raw.githubusercontent.com/example/mcjs-market/main/plugins/fps-monitor.json"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 // MCJS 镜像站 - 版本数据
 // 所有 Eaglercraft/MCJS 版本及镜像链接
 
+// 同时挂到 window 和模块作用域,避免 IIFE/作用域差异导致引用失败
 const VERSIONS = [
   // === MCJS 优化版（推荐） ===
   {
@@ -16,7 +17,7 @@ const VERSIONS = [
     multiplayer: true,
     modpack: false,
     description: '兼容性最佳。支持 PC + 手机，局域网 & P2P 联机，光影效果。',
-    recommendTag: '推荐 | 最佳兼容',
+    recommendTag: '最佳兼容',
     detail: '语言：简体中文、英文\n' +
             '性能：高\n' +
             '设备：电脑键鼠操作、手机触屏操作\n' +
@@ -45,7 +46,7 @@ const VERSIONS = [
     multiplayer: true,
     modpack: false,
     description: '性能最佳。WASM 增强，更高 FPS。需要现代 Chrome 浏览器。',
-    recommendTag: '推荐 | 最佳性能',
+    recommendTag: '最佳性能',
     detail: '语言：简体中文、英文\n' +
             '性能：极高\n' +
             '设备：电脑键鼠操作、手机触屏操作\n' +
@@ -74,8 +75,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: '最新稳定客户端版本。支持中文。暂不支持多人联机或光影。',
-    detail: '测试版\n' +
-            '语言：简体中文、英文\n' +
+    detail:'语言：简体中文、英文\n' +
             '性能：中\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗\n' +
@@ -103,8 +103,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: '1.12.2 的 WASM 版本。性能更好，仍在测试中。',
-    detail: '测试版\n' +
-            '语言：简体中文、英文\n' +
+    detail:'语言：简体中文、英文\n' +
             '性能：较高\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗\n' +
@@ -132,8 +131,7 @@ const VERSIONS = [
     multiplayer: true,
     modpack: false,
     description: 'u3：新增存档导出和远程多人联机。切换语言会导致游戏崩溃（仅限英文）。',
-    detail: '测试版\n' +
-            '与 1.12.2 u2 版的区别：此 u3 版新增了导出世界和远程联机支持，修复了部分渲染问题，但是有新 bug：切换语言会导致游戏崩溃，故只有英文版\n' +
+    detail:'与 1.12.2 u2 版的区别：此 u3 版新增了导出世界和远程联机支持，修复了部分渲染问题，但是有新 bug：切换语言会导致游戏崩溃，故只有英文版\n' +
             '语言：仅英文原版\n' +
             '性能：较高\n' +
             '设备：仅支持电脑键鼠操作\n' +
@@ -164,8 +162,7 @@ const VERSIONS = [
     multiplayer: true,
     modpack: false,
     description: '下界更新移植版！非常早期的 Beta。需要高配电脑。仅限英文。',
-    detail: '新版测试\n' +
-            '语言：仅英文原版\n' +
+    detail:'语言：仅英文原版\n' +
             '性能：低（建议使用高性能的电脑）\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
@@ -189,8 +186,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: '棘巧试炼更新。极度早期版本，可能导致浏览器崩溃。仅限英文。',
-    detail: '新版测试\n' +
-            '警告：性能极差，容易导致浏览器崩溃\n' +
+    detail: '警告：性能极差，容易导致浏览器崩溃\n' +
             '语言：仅英文原版\n' +
             '性能：极低（建议使用高性能的电脑）\n' +
             '设备：仅支持电脑键鼠操作\n' +
@@ -215,8 +211,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: '前沿版本。非常不稳定，可能崩溃。仅限英文。',
-    detail: '新版测试\n' +
-            '警告：性能极差，容易导致浏览器崩溃\n' +
+    detail:'警告：性能极差，容易导致浏览器崩溃\n' +
             '语言：仅英文原版\n' +
             '性能：极低（建议使用高性能的电脑）\n' +
             '设备：仅支持电脑键鼠操作\n' +
@@ -243,8 +238,7 @@ const VERSIONS = [
     multiplayer: true,
     modpack: true,
     description: '1.6.4 Forge 轻量模组整合包。需要高性能电脑。仅限英文。',
-    detail: '测试版 | 模组整合包\n' +
-            '语言：仅英文原版\n' +
+    detail:'语言：仅英文原版\n' +
             '性能：较低\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
@@ -273,8 +267,7 @@ const VERSIONS = [
     multiplayer: true,
     modpack: true,
     description: '1.6.4 Forge 硬核科技模组整合包。文件大，启动久。仅限英文。',
-    detail: '测试版 | 模组整合包\n' +
-            '文件较大，启动时间较长\n' +
+    detail:'文件较大，启动时间较长\n' +
             '语言：仅英文原版\n' +
             '性能：低（建议使用高性能的电脑）\n' +
             '设备：仅支持电脑键鼠操作\n' +
@@ -304,8 +297,7 @@ const VERSIONS = [
     multiplayer: true,
     modpack: true,
     description: '1.6.4 Forge 天空工厂模组整合包。文件大，启动久。仅限英文。',
-    detail: '测试版 | 模组整合包\n' +
-            '文件较大，启动时间较长\n' +
+    detail:'文件较大，启动时间较长\n' +
             '语言：仅英文原版\n' +
             '性能：低（建议使用高性能的电脑）\n' +
             '设备：仅支持电脑键鼠操作\n' +
@@ -335,8 +327,7 @@ const VERSIONS = [
     multiplayer: true,
     modpack: true,
     description: '1.6.4 Forge 神奇魔法模组整合包。文件大，启动久。仅限英文。',
-    detail: '测试版 | 模组整合包\n' +
-            '文件较大，启动时间较长\n' +
+    detail:'文件较大，启动时间较长\n' +
             '语言：仅英文原版\n' +
             '性能：低（建议使用高性能的电脑）\n' +
             '设备：仅支持电脑键鼠操作\n' +
@@ -368,8 +359,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: '马匹更新。仅限英文，怀旧体验。',
-    detail: '经典版\n' +
-            '语言：仅英文原版\n' +
+    detail: '语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: '1.6.4',
@@ -395,8 +385,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: '最初的 Eaglercraft 版本。红石更新时代。仅限英文。',
-    detail: '经典版\n' +
-            '语言：仅英文原版\n' +
+    detail:'语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: '1.5.2',
@@ -422,8 +411,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: 'Minecraft 经典时代。仅限英文，复古体验。',
-    detail: '经典版\n' +
-            '语言：仅英文原版\n' +
+    detail:'语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: '1.2.5',
@@ -449,8 +437,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: 'Beta 时代 Minecraft。仅限英文，怀旧体验。',
-    detail: '经典版\n' +
-            '语言：仅英文原版\n' +
+    detail:'语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: 'legacy/beta1.7.3',
@@ -476,8 +463,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: '最早的 Eaglercraft 单机版本。仅限英文，非常复古。',
-    detail: '经典版\n' +
-            '语言：仅英文原版\n' +
+    detail:'语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: 'legacy/beta1.3',
@@ -503,8 +489,7 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: 'Alpha 时代 Minecraft。最早的 Eaglercraft 可玩版本。仅限英文。',
-    detail: '经典版\n' +
-            '语言：仅英文原版\n' +
+    detail:'语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: 'legacy/alpha1.2.6',
@@ -519,6 +504,8 @@ const VERSIONS = [
   }
 ];
 
+
+
 const MIRROR_BASES = [
   'https://playmcjscc.pages.dev',
   'https://play.mcjs.144449.xyz',
@@ -527,3 +514,9 @@ const MIRROR_BASES = [
   'https://mcjs-mirror.144449.xyz',
   'https://mcjs-mirror-test.144449.xyz'
 ];
+
+// 暴露到全局,确保跨脚本可访问
+if (typeof window !== 'undefined') {
+  window.VERSIONS = VERSIONS;
+  window.MIRROR_BASES = MIRROR_BASES;
+}

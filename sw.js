@@ -1,6 +1,26 @@
 /* MCJS Launcher - Service Worker */
-const CACHE_VERSION = 'mcjs-sw-v2-r1';
+const CACHE_VERSION = 'mcjs-sw-v2-r3';
 const GAME_CACHE_PREFIX = 'mcjs-game-';
+const DEFAULT_CACHE_LIMIT = 500; // 默认缓存条目数量限制
+var cacheSizeLimit = DEFAULT_CACHE_LIMIT;
+
+// 检查并清理超出限制的缓存（简单的 FIFO 策略）
+async function checkAndTrimCache(cache) {
+  try {
+    var keys = await cache.keys();
+    if (keys.length <= cacheSizeLimit) return;
+    
+    var excess = keys.length - cacheSizeLimit;
+    console.log('[SW] Cache limit exceeded, trimming', excess, 'oldest entries');
+    
+    // 删除最旧的条目（前 excess 个）
+    for (var i = 0; i < excess && i < keys.length; i++) {
+      await cache.delete(keys[i]);
+    }
+  } catch (e) {
+    console.warn('[SW] Cache trim failed:', e);
+  }
+}
 
 // Install event
 self.addEventListener('install', function(event) {
@@ -77,7 +97,10 @@ self.addEventListener('fetch', function(event) {
           if (networkResponse.ok) {
             // Clone and cache the response
             var responseToCache = networkResponse.clone();
-            cache.put(event.request, responseToCache).catch(function(err) {
+            cache.put(event.request, responseToCache).then(function() {
+              // 检查缓存大小，超出限制时清理
+              return checkAndTrimCache(cache);
+            }).catch(function(err) {
               console.warn('[SW] Cache put failed:', err);
             });
 
@@ -151,6 +174,15 @@ self.addEventListener('message', function(event) {
         return cache.keys().then(function(keys) {
           return { type: 'CACHE_SIZE_RESPONSE', count: keys.length };
         });
+      })
+    );
+  }
+  if (event.data && event.data.type === 'SET_CACHE_LIMIT') {
+    cacheSizeLimit = event.data.limit || DEFAULT_CACHE_LIMIT;
+    console.log('[SW] Cache limit set to:', cacheSizeLimit);
+    event.waitUntil(
+      caches.open(CACHE_VERSION).then(function(cache) {
+        return checkAndTrimCache(cache);
       })
     );
   }

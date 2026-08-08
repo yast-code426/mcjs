@@ -14,13 +14,158 @@ var launchProgress = document.getElementById('launchProgress');
 var launchContent = document.getElementById('launchContent');
 
 /* ========== State ========== */
+// 确保 settings 有完整的默认值
+var DEFAULT_APP_SETTINGS = {
+  mirrorIndex: 0,
+  memoryLimit: 512,
+  autoClean: true,
+  saveIsolation: true,
+  gpuPrefer: 'high-performance',
+  cacheSizeLimit: 2048,
+  bgImage: true,
+  soundEnabled: true,
+  fullscreenLaunch: false,
+  fontSize: 'normal',
+  cardDensity: 'comfortable',
+  autoUpdateCheck: true,
+  loadingDetail: true,
+  quickLaunch: false,
+  reduceMotion: false,
+  popupLaunch: false
+};
+
+function ensureSettingsDefaults(s) {
+  if (!s || typeof s !== 'object') s = {};
+  for (var key in DEFAULT_APP_SETTINGS) {
+    if (s[key] === undefined || s[key] === null) {
+      s[key] = DEFAULT_APP_SETTINGS[key];
+    }
+  }
+  return s;
+}
+
+var settings = ensureSettingsDefaults(window.MCJS_SETTINGS || {});
+// 如果 window.MCJS_SETTINGS 存在但不完整，更新它
+if (window.MCJS_SETTINGS) {
+  window.MCJS_SETTINGS = settings;
+}
+
 var searchQuery = '';
 var searchDebounceTimer = null;
-var settings = window.MCJS_SETTINGS || {};
 var sound = null;
 var currentVersion = null;
 var isLaunching = false;
 var settingsWindow = null;
+var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+var isPageRestored = false;
+var settingsOpening = false;
+
+/* ========== iOS 页面状态管理 ========== */
+var STATE_KEY = 'mcjs_session_state';
+
+function saveSessionState() {
+  try {
+    var state = {
+      lastVersion: currentVersion ? currentVersion.id : null,
+      timestamp: Date.now(),
+      isGameRunning: gameOverlay.classList.contains('active'),
+      versionName: currentVersion ? currentVersion.name : null
+    };
+    sessionStorage.setItem(STATE_KEY, JSON.stringify(state));
+  } catch(e) {}
+}
+
+function loadSessionState() {
+  try {
+    var raw = sessionStorage.getItem(STATE_KEY);
+    if (!raw) return null;
+    var state = JSON.parse(raw);
+    if (Date.now() - state.timestamp > 60000) {
+      sessionStorage.removeItem(STATE_KEY);
+      return null;
+    }
+    return state;
+  } catch(e) { return null; }
+}
+
+function clearSessionState() {
+  try { sessionStorage.removeItem(STATE_KEY); } catch(e) {}
+}
+
+function handlePageVisibility() {
+  if (document.hidden) {
+    saveSessionState();
+  } else {
+    var state = loadSessionState();
+    if (state && state.isGameRunning && !gameOverlay.classList.contains('active')) {
+      if (state.lastVersion) {
+        var versions0 = getVersions();
+        var ver = versions0 ? versions0.find(function(v) { return v.id === state.lastVersion; }) : null;
+        if (ver) {
+          showRestoreBanner(ver);
+        }
+      }
+    }
+  }
+}
+
+function showRestoreBanner(version) {
+  var existing = document.querySelector('.ios-restore-banner');
+  if (existing) {
+    existing.classList.add('active');
+    return;
+  }
+  var banner = document.createElement('div');
+  banner.className = 'ios-restore-banner active';
+  banner.setAttribute('role', 'alert');
+  banner.innerHTML = 
+    '<span>检测到上次未关闭的游戏会话 (' + escapeHtml(version.name) + ')</span>' +
+    '<div class="banner-actions">' +
+      '<button class="banner-btn banner-btn-primary" data-action="restore">恢复游戏</button>' +
+      '<button class="banner-btn banner-btn-secondary" data-action="dismiss">忽略</button>' +
+    '</div>';
+  document.body.appendChild(banner);
+  
+  banner.querySelector('[data-action="restore"]').addEventListener('click', function() {
+    banner.classList.remove('active');
+    setTimeout(function() { banner.remove(); }, 300);
+    launchVersion(version.id);
+    clearSessionState();
+  });
+  banner.querySelector('[data-action="dismiss"]').addEventListener('click', function() {
+    banner.classList.remove('active');
+    setTimeout(function() { banner.remove(); }, 300);
+    clearSessionState();
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/* ========== 页面生命周期 ========== */
+document.addEventListener('visibilitychange', handlePageVisibility);
+window.addEventListener('pagehide', function() { saveSessionState(); });
+window.addEventListener('beforeunload', function() { saveSessionState(); });
+window.addEventListener('pageshow', function(e) {
+  if (e.persisted) {
+    isPageRestored = true;
+    var state = loadSessionState();
+    if (state && state.isGameRunning) {
+      if (state.lastVersion) {
+        var versions1 = getVersions();
+        var ver = versions1 ? versions1.find(function(v) { return v.id === state.lastVersion; }) : null;
+        if (ver) {
+          setTimeout(function() { showRestoreBanner(ver); }, 500);
+        }
+      }
+    }
+  }
+});
 
 /* ========== Sound Manager ========== */
 var SoundManager = function(){
@@ -107,7 +252,9 @@ SoundManager.prototype.error = function(){ if(!this.enabled) return; this._tone(
 SoundManager.prototype.setEnabled = function(on){ this.enabled = !!on; };
 
 /* ========== Rendering ========== */
-function escapeHtml(str){
+function escapeHtml2(str){
+  if(str === null || str === undefined) return '';
+  if(typeof str !== 'string') str = String(str);
   var div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
@@ -120,138 +267,106 @@ var BADGE_MAP = {
   'new-beta': { cls: 'badge-new', text: '新版测试' }
 };
 
-/* ============================================================
-   ===== 详情高亮渲染函数 =====
-   ============================================================ */
 function renderHighlightedDetail(detailText) {
+  if (detailText === null || detailText === undefined) return '';
   if (!detailText) return '';
   
-  var lines = detailText.split('\n');
-  var result = [];
-  
-  for (var i = 0; i < lines.length; i++) {
-    var line = lines[i].trim();
-    if (!line) continue;
+  try {
+    var lines = detailText.split('\n');
+    var result = [];
     
-    var escaped = escapeHtml(line);
-    var rendered = escaped;
-    
-    // ---- 1. 联机状态：✓ 绿色粗体，✗ 灰色 ----
-    rendered = rendered.replace(/✓/g, '<span class="detail-icon detail-icon-ok">✓</span>');
-    rendered = rendered.replace(/✗/g, '<span class="detail-icon detail-icon-fail">✗</span>');
-    
-    // ---- 2. 性能等级高亮 ----
-    // 性能：高 → 绿色
-    rendered = rendered.replace(/(性能：)(高)/g, '$1<span class="detail-perf detail-perf-high">$2</span>');
-    // 性能：极高 → 绿色+粗体
-    rendered = rendered.replace(/(性能：)(极高)/g, '$1<span class="detail-perf detail-perf-extreme">$2</span>');
-    // 性能：中 → 橙色
-    rendered = rendered.replace(/(性能：)(中)/g, '$1<span class="detail-perf detail-perf-medium">$2</span>');
-    // 性能：较低 → 红色
-    rendered = rendered.replace(/(性能：)(较低)/g, '$1<span class="detail-perf detail-perf-low">$2</span>');
-    // 性能：低 → 红色
-    rendered = rendered.replace(/(性能：)(低)/g, '$1<span class="detail-perf detail-perf-low">$2</span>');
-    // 性能：极低 → 红色+粗体
-    rendered = rendered.replace(/(性能：)(极低)/g, '$1<span class="detail-perf detail-perf-verylow">$2</span>');
-    
-    // ---- 3. 语言支持 ----
-    // 简体中文 → 绿色高亮
-    rendered = rendered.replace(/(语言：)(简体中文、英文)/g, '$1<span class="detail-lang detail-lang-zh">$2</span>');
-    rendered = rendered.replace(/(语言：)(简体中文)/g, '$1<span class="detail-lang detail-lang-zh">$2</span>');
-    // 仅英文原版 → 灰色
-    rendered = rendered.replace(/(语言：)(仅英文原版)/g, '$1<span class="detail-lang detail-lang-en">$2</span>');
-    rendered = rendered.replace(/(语言：)(仅英文)/g, '$1<span class="detail-lang detail-lang-en">$2</span>');
-    // English → 普通
-    rendered = rendered.replace(/(语言：)(English)/g, '$1<span class="detail-lang detail-lang-en">$2</span>');
-    
-    // ---- 4. 设备支持 ----
-    // 触屏支持 → 蓝色高亮
-    rendered = rendered.replace(/(设备：)(.*?)(触屏支持)(.*)/g, '$1$2<span class="detail-device detail-device-touch">触屏支持</span>$4');
-    rendered = rendered.replace(/(设备：)(.*?)(触屏操作)(.*)/g, '$1$2<span class="detail-device detail-device-touch">触屏操作</span>$4');
-    // 仅支持电脑键鼠操作 → 灰色
-    rendered = rendered.replace(/(设备：)(仅支持电脑键鼠操作)/g, '$1<span class="detail-device detail-device-pc">$2</span>');
-    // 电脑键鼠操作 → 普通高亮
-    rendered = rendered.replace(/(设备：)(电脑键鼠操作)/g, '$1<span class="detail-device detail-device-pc">$2</span>');
-    
-    // ---- 5. 联机标签 ----
-    // 单机 ✓ → 绿色
-    rendered = rendered.replace(/(单机)(\s*)(✓)/g, '<span class="detail-feature detail-feature-single">单机</span> <span class="detail-icon detail-icon-ok">✓</span>');
-    rendered = rendered.replace(/(单机)(\s*)(✗)/g, '<span class="detail-feature detail-feature-single">单机</span> <span class="detail-icon detail-icon-fail">✗</span>');
-    // 局域网 ✓ → 蓝色
-    rendered = rendered.replace(/(局域网)(\s*)(✓)/g, '<span class="detail-feature detail-feature-lan">局域网</span> <span class="detail-icon detail-icon-ok">✓</span>');
-    rendered = rendered.replace(/(局域网)(\s*)(✗)/g, '<span class="detail-feature detail-feature-lan">局域网</span> <span class="detail-icon detail-icon-fail">✗</span>');
-    // 远程联机 ✓ → 紫色
-    rendered = rendered.replace(/(远程联机)(\s*)(✓)/g, '<span class="detail-feature detail-feature-online">远程联机</span> <span class="detail-icon detail-icon-ok">✓</span>');
-    rendered = rendered.replace(/(远程联机)(\s*)(✗)/g, '<span class="detail-feature detail-feature-online">远程联机</span> <span class="detail-icon detail-icon-fail">✗</span>');
-    
-    // ---- 6. 资源标签 ----
-    // 自定义材质包 → 紫色
-    rendered = rendered.replace(/自定义材质包/g, '<span class="detail-resource detail-resource-texture">自定义材质包</span>');
-    // 内置光影包 → 蓝色
-    rendered = rendered.replace(/内置光影包/g, '<span class="detail-resource detail-resource-shader">内置光影包</span>');
-    // 内置模组包 → 紫色
-    rendered = rendered.replace(/内置模组包/g, '<span class="detail-resource detail-resource-mod">内置模组包</span>');
-    // 光影渲染 → 蓝色
-    rendered = rendered.replace(/光影渲染/g, '<span class="detail-resource detail-resource-shader">光影渲染</span>');
-    // 高帧率 → 绿色
-    rendered = rendered.replace(/高帧率/g, '<span class="detail-resource detail-resource-fps">高帧率</span>');
-    
-    // ---- 7. 警告信息 ----
-    // ⚠️ 开头或含"警告"的行 → 红色大字号
-    if (rendered.indexOf('⚠️') !== -1 || rendered.indexOf('警告') !== -1) {
-      rendered = '<span class="detail-warning">' + rendered + '</span>';
-    }
-    // 巨卡慎选 → 红色大字号
-    if (rendered.indexOf('巨卡慎选') !== -1) {
-      rendered = '<span class="detail-warning">' + rendered + '</span>';
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      
+      var escaped = escapeHtml2(line);
+      var rendered = escaped;
+      
+      try {
+        rendered = rendered.replace(/✓/g, '<span class="detail-icon detail-icon-ok">✓</span>');
+        rendered = rendered.replace(/✗/g, '<span class="detail-icon detail-icon-fail">✗</span>');
+        
+        rendered = rendered.replace(/(性能：)(高)/g, '$1<span class="detail-perf detail-perf-high">$2</span>');
+        rendered = rendered.replace(/(性能：)(极高)/g, '$1<span class="detail-perf detail-perf-extreme">$2</span>');
+        rendered = rendered.replace(/(性能：)(中)/g, '$1<span class="detail-perf detail-perf-medium">$2</span>');
+        rendered = rendered.replace(/(性能：)(较低)/g, '$1<span class="detail-perf detail-perf-low">$2</span>');
+        rendered = rendered.replace(/(性能：)(低)/g, '$1<span class="detail-perf detail-perf-low">$2</span>');
+        rendered = rendered.replace(/(性能：)(极低)/g, '$1<span class="detail-perf detail-perf-verylow">$2</span>');
+        
+        rendered = rendered.replace(/(语言：)(简体中文、英文)/g, '$1<span class="detail-lang detail-lang-zh">$2</span>');
+        rendered = rendered.replace(/(语言：)(简体中文)/g, '$1<span class="detail-lang detail-lang-zh">$2</span>');
+        rendered = rendered.replace(/(语言：)(仅英文原版)/g, '$1<span class="detail-lang detail-lang-en">$2</span>');
+        rendered = rendered.replace(/(语言：)(仅英文)/g, '$1<span class="detail-lang detail-lang-en">$2</span>');
+        rendered = rendered.replace(/(语言：)(English)/g, '$1<span class="detail-lang detail-lang-en">$2</span>');
+        
+        rendered = rendered.replace(/(设备：)(.*?)(触屏支持)(.*)/g, '$1$2<span class="detail-device detail-device-touch">触屏支持</span>$4');
+        rendered = rendered.replace(/(设备：)(.*?)(触屏操作)(.*)/g, '$1$2<span class="detail-device detail-device-touch">触屏操作</span>$4');
+        rendered = rendered.replace(/(设备：)(仅支持电脑键鼠操作)/g, '$1<span class="detail-device detail-device-pc">$2</span>');
+        rendered = rendered.replace(/(设备：)(电脑键鼠操作)/g, '$1<span class="detail-device detail-device-pc">$2</span>');
+        
+        rendered = rendered.replace(/(单机)(\s*)(✓)/g, '<span class="detail-feature detail-feature-single">单机</span> <span class="detail-icon detail-icon-ok">✓</span>');
+        rendered = rendered.replace(/(单机)(\s*)(✗)/g, '<span class="detail-feature detail-feature-single">单机</span> <span class="detail-icon detail-icon-fail">✗</span>');
+        rendered = rendered.replace(/(局域网)(\s*)(✓)/g, '<span class="detail-feature detail-feature-lan">局域网</span> <span class="detail-icon detail-icon-ok">✓</span>');
+        rendered = rendered.replace(/(局域网)(\s*)(✗)/g, '<span class="detail-feature detail-feature-lan">局域网</span> <span class="detail-icon detail-icon-fail">✗</span>');
+        rendered = rendered.replace(/(远程联机)(\s*)(✓)/g, '<span class="detail-feature detail-feature-online">远程联机</span> <span class="detail-icon detail-icon-ok">✓</span>');
+        rendered = rendered.replace(/(远程联机)(\s*)(✗)/g, '<span class="detail-feature detail-feature-online">远程联机</span> <span class="detail-icon detail-icon-fail">✗</span>');
+        
+        rendered = rendered.replace(/自定义材质包/g, '<span class="detail-resource detail-resource-texture">自定义材质包</span>');
+        rendered = rendered.replace(/内置光影包/g, '<span class="detail-resource detail-resource-shader">内置光影包</span>');
+        rendered = rendered.replace(/内置模组包/g, '<span class="detail-resource detail-resource-mod">内置模组包</span>');
+        rendered = rendered.replace(/光影渲染/g, '<span class="detail-resource detail-resource-shader">光影渲染</span>');
+        rendered = rendered.replace(/高帧率/g, '<span class="detail-resource detail-resource-fps">高帧率</span>');
+        
+        if (rendered.indexOf('⚠️') !== -1 || rendered.indexOf('警告') !== -1) {
+          rendered = '<span class="detail-warning">' + rendered + '</span>';
+        }
+        if (rendered.indexOf('巨卡慎选') !== -1) {
+          rendered = '<span class="detail-warning">' + rendered + '</span>';
+        }
+        
+        if (rendered.indexOf('测试版') !== -1 && rendered.indexOf('|') !== -1) {
+          rendered = rendered.replace(/测试版/g, '<span class="detail-badge-beta">测试版</span>');
+        }
+        if (rendered.indexOf('模组整合包') !== -1 && rendered.indexOf('|') !== -1) {
+          rendered = rendered.replace(/模组整合包/g, '<span class="detail-badge-modpack">模组整合包</span>');
+        }
+        if (rendered.indexOf('经典版') !== -1) {
+          rendered = rendered.replace(/经典版/g, '<span class="detail-badge-legacy">经典版</span>');
+        }
+        if (rendered.indexOf('新版测试') !== -1) {
+          rendered = rendered.replace(/新版测试/g, '<span class="detail-badge-new">新版测试</span>');
+        }
+      } catch(lineErr) {
+        console.warn('[MCJS] Line render failed, using escaped text:', lineErr.message);
+        rendered = escaped;
+      }
+      
+      result.push('<div class="detail-line">' + rendered + '</div>');
     }
     
-    // ---- 8. 测试版/新版标签 ----
-    if (rendered.indexOf('测试版') !== -1 && rendered.indexOf('|') !== -1) {
-      rendered = rendered.replace(/测试版/g, '<span class="detail-badge-beta">测试版</span>');
-    }
-    if (rendered.indexOf('模组整合包') !== -1 && rendered.indexOf('|') !== -1) {
-      rendered = rendered.replace(/模组整合包/g, '<span class="detail-badge-modpack">模组整合包</span>');
-    }
-    if (rendered.indexOf('经典版') !== -1) {
-      rendered = rendered.replace(/经典版/g, '<span class="detail-badge-legacy">经典版</span>');
-    }
-    
-    // ---- 9. 新版测试标签 ----
-    if (rendered.indexOf('新版测试') !== -1) {
-      rendered = rendered.replace(/新版测试/g, '<span class="detail-badge-new">新版测试</span>');
-    }
-    
-    // ---- 10. 语言标签辅助 ----
-    // 修复联机行中残留的纯文本
-    // 已经处理过的就不再重复
-    
-    result.push('<div class="detail-line">' + rendered + '</div>');
+    return result.join('');
+  } catch(e) {
+    console.warn('[MCJS] renderHighlightedDetail failed:', e.message);
+    return '<div class="detail-line">' + escapeHtml2(detailText) + '</div>';
   }
-  
-  return result.join('');
 }
-
-/* ============================================================ */
 
 function renderCard(ver){
   var badge = BADGE_MAP[ver.type] || BADGE_MAP.legacy;
-  var extra = ver.recommendTag ? (' <span class="card-recommend-tag">' + escapeHtml(ver.recommendTag) + '</span>') : '';
-  
-  // 使用高亮渲染详情
+  var extra = ver.recommendTag ? (' <span class="card-recommend-tag">' + escapeHtml2(ver.recommendTag) + '</span>') : '';
   var detailHtml = renderHighlightedDetail(ver.detail);
 
-  return '<div class="version-card" data-type="' + ver.type + '" data-id="' + ver.id + '" data-engine="' + ver.engine + '">' +
+  return '<div class="version-card" role="article" aria-label="' + escapeHtml2(ver.name) + ' 版本卡片" data-type="' + ver.type + '" data-id="' + ver.id + '" data-engine="' + ver.engine + '">' +
     '<div class="card-badges">' +
       '<span class="card-badge ' + badge.cls + '">' + badge.text + '</span>' + extra +
     '</div>' +
-    '<div class="card-title">' + escapeHtml(ver.name) + '</div>' +
-    '<div class="card-meta">' + escapeHtml(ver.version) + '</div>' +
-    '<div class="card-meta card-author">原作者: ' + escapeHtml(ver.author) + '</div>' +
+    '<div class="card-title">' + escapeHtml2(ver.name) + '</div>' +
+    '<div class="card-meta">' + escapeHtml2(ver.version) + '</div>' +
+    '<div class="card-meta card-author">原作者: ' + escapeHtml2(ver.author) + '</div>' +
     '<div class="card-detail">' + detailHtml + '</div>' +
     '<div class="card-footer">' +
       '<span class="card-size">' + ver.size + '</span>' +
-      '<button class="card-launch-btn" data-id="' + ver.id + '" aria-label="启动 ' + escapeHtml(ver.name) + '">开始游戏</button>' +
+      '<button class="card-launch-btn" data-id="' + ver.id + '" aria-label="启动 ' + escapeHtml2(ver.name) + '">开始游戏</button>' +
     '</div>' +
   '</div>';
 }
@@ -292,31 +407,53 @@ var GROUPS = [
   }
 ];
 
+function getVersions(){
+  if(typeof VERSIONS !== 'undefined' && Array.isArray(VERSIONS)) return VERSIONS;
+  if(window.VERSIONS && Array.isArray(window.VERSIONS)) return window.VERSIONS;
+  return null;
+}
+
 function renderGrid(){
-  var q = searchQuery.toLowerCase();
-  var html = '';
-  var totalShown = 0;
-
-  GROUPS.forEach(function(group){
-    var matched = VERSIONS.filter(function(ver){
-      if(!group.typeMatch(ver)) return false;
-      return matchSearch(ver, q);
-    });
-    if(matched.length === 0) return;
-    totalShown += matched.length;
-    html += '<section class="version-group" data-group="' + group.id + '">' +
-      '<header class="group-header">' +
-        '<h3 class="group-title">' + escapeHtml(group.title) + '</h3>' +
-        '<p class="group-desc">' + escapeHtml(group.desc) + '</p>' +
-      '</header>' +
-      '<div class="version-grid">' + matched.map(renderCard).join('') + '</div>' +
-    '</section>';
-  });
-
-  if(totalShown === 0){
-    html = '<div class="empty-state"><p>没有找到匹配的版本</p><p style="font-size:0.78rem;margin-top:6px;opacity:0.7;">请尝试其他搜索关键词</p></div>';
+  if(!grid){ grid = document.getElementById('versionSections'); }
+  if(!grid){ console.error('[MCJS] renderGrid: no #versionSections'); return; }
+  
+  var versions = getVersions();
+  if(!versions){
+    console.error('[MCJS] renderGrid: VERSIONS not available');
+    grid.innerHTML = '<div class="empty-state"><p>版本数据加载失败，请刷新页面</p></div>';
+    return;
   }
-  grid.innerHTML = html;
+  
+  try {
+    var q = searchQuery.toLowerCase();
+    var html = '';
+    var totalShown = 0;
+  
+    GROUPS.forEach(function(group){
+      var matched = versions.filter(function(ver){
+        if(!group.typeMatch(ver)) return false;
+        return matchSearch(ver, q);
+      });
+      if(matched.length === 0) return;
+      totalShown += matched.length;
+      html += '<section class="version-group" data-group="' + group.id + '">' +
+        '<header class="group-header">' +
+          '<h3 class="group-title">' + escapeHtml2(group.title) + '</h3>' +
+          '<p class="group-desc">' + escapeHtml2(group.desc) + '</p>' +
+        '</header>' +
+        '<div class="version-grid">' + matched.map(renderCard).join('') + '</div>' +
+      '</section>';
+    });
+  
+    if(totalShown === 0){
+      html = '<div class="empty-state"><p>没有找到匹配的版本</p><p style="font-size:0.78rem;margin-top:6px;opacity:0.7;">请尝试其他搜索关键词</p></div>';
+    }
+    grid.innerHTML = html;
+    console.log('[MCJS] renderGrid: rendered', totalShown, 'versions');
+  } catch(e) {
+    console.error('[MCJS] renderGrid error:', e);
+    try { grid.innerHTML = '<div class="empty-state"><p>渲染版本列表出错: ' + escapeHtml2(e.message) + '</p></div>'; } catch(_){}
+  }
 }
 
 /* ========== Search ========== */
@@ -325,11 +462,39 @@ searchInput.addEventListener('input', function(){
   searchDebounceTimer = setTimeout(function(){
     searchQuery = searchInput.value.trim();
     renderGrid();
-  }, 180);
+    updateSearchClearBtn();
+  }, 300);
 });
 searchInput.addEventListener('keydown', function(e){ e.stopPropagation(); });
 searchInput.addEventListener('keyup', function(e){ e.stopPropagation(); });
 searchInput.addEventListener('keypress', function(e){ e.stopPropagation(); });
+
+function updateSearchClearBtn(){
+  var btn = document.getElementById('searchClearBtn');
+  if(!btn) return;
+  if(searchInput.value.length > 0){
+    btn.style.display = 'flex';
+  }else{
+    btn.style.display = 'none';
+  }
+}
+function clearSearch(){
+  if(searchInput){
+    searchInput.value = '';
+    searchQuery = '';
+    renderGrid();
+    updateSearchClearBtn();
+    searchInput.focus();
+  }
+}
+(function(){
+  var clearBtn = document.getElementById('searchClearBtn');
+  if(clearBtn){
+    clearBtn.addEventListener('click', function(){
+      clearSearch();
+    });
+  }
+})();
 
 /* ========== WASM 检测 ========== */
 function checkWasmSupport() {
@@ -365,7 +530,9 @@ grid.addEventListener('click', function(e){
 });
 
 function launchVersion(id){
-  var ver = VERSIONS.find(function(v){ return v.id === id; });
+  var versions = getVersions();
+  if(!versions) return;
+  var ver = versions.find(function(v){ return v.id === id; });
   if(!ver) return;
   currentVersion = ver;
   if (settings.quickLaunch === true) {
@@ -390,8 +557,8 @@ function renderMirrorSelection(ver){
   '</div>';
   html += ver.mirrors.map(function(m, i){
     return '<div class="mirror-item" data-mirror="' + i + '" role="button" tabindex="0">' +
-      '<div class="mirror-item-name">' + escapeHtml(m.name) + '</div>' +
-      '<div class="mirror-item-url">' + escapeHtml(m.url) + '</div>' +
+      '<div class="mirror-item-name">' + escapeHtml2(m.name) + '</div>' +
+      '<div class="mirror-item-url">' + escapeHtml2(m.url) + '</div>' +
     '</div>';
   }).join('');
   container.innerHTML = html;
@@ -437,6 +604,12 @@ launchModal.addEventListener('click', function(e){
 
 function startGameLaunch(ver){
   if (isLaunching) return;
+  
+  if (settings.popupLaunch) {
+    launchInPopup(ver);
+    return;
+  }
+  
   isLaunching = true;
   
   gameTitle.textContent = ver.name;
@@ -470,6 +643,7 @@ function startGameLaunch(ver){
     },
     function(){
       isLaunching = false;
+      saveSessionState();
       setTimeout(function(){
         if(launchContent) launchContent.style.display = 'none';
         if(gameToolbar) gameToolbar.style.display = 'flex';
@@ -502,6 +676,88 @@ function startGameLaunch(ver){
   );
 }
 
+function launchInPopup(ver){
+  var popupHtml = buildPopupHTML(ver);
+  var win = window.open('', '_blank', 'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no,scrollbars=no,resizable=yes');
+  if (!win) {
+    console.error('[MCJS] Popup blocked by browser');
+    alert('弹窗被浏览器拦截，请允许此站点弹出窗口，或在设置中关闭"弹窗启动"选项。');
+    return;
+  }
+  try {
+    win.document.open();
+    win.document.write(popupHtml);
+    win.document.close();
+    win.focus();
+  } catch(e) {
+    console.error('[MCJS] Failed to write popup window:', e);
+    alert('无法打开游戏窗口，请检查浏览器设置。');
+  }
+}
+
+function buildPopupHTML(ver){
+  var settingsJson = JSON.stringify(window.MCJS_SETTINGS || {});
+  var verJson = JSON.stringify(ver);
+  return '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n' +
+    '<meta charset="UTF-8">\n' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+    '<title>' + escapeHtml2(ver.name) + ' - MCJS</title>\n' +
+    '<style>\n' +
+    '  * { margin:0; padding:0; box-sizing:border-box; }\n' +
+    '  html, body { width:100%; height:100%; overflow:hidden; background:#0d0e12; }\n' +
+    '  #gameContainer { width:100%; height:100%; position:relative; }\n' +
+    '  #popupLoader { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#1c1d24; color:#d6d8de; font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; z-index:9999; }\n' +
+    '  #popupLoader .ring { width:48px; height:48px; border:3px solid rgba(214,216,222,0.18); border-top-color:#22c55e; border-radius:50%; animation:spin 0.7s linear infinite; margin-bottom:16px; }\n' +
+    '  @keyframes spin { to { transform:rotate(360deg); } }\n' +
+    '  #popupLoader .label { font-size:14px; opacity:0.9; }\n' +
+    '  #popupLoader.hidden { display:none; }\n' +
+    '  #popupError { position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; background:#1c1d24; color:#f87171; font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; z-index:10000; padding:24px; text-align:center; }\n' +
+    '  #popupError .title { font-size:18px; font-weight:600; margin-bottom:8px; }\n' +
+    '  #popupError .msg { font-size:14px; opacity:0.8; max-width:400px; line-height:1.6; }\n' +
+    '</style>\n' +
+    '</head>\n<body>\n' +
+    '<div id="gameContainer"></div>\n' +
+    '<div id="popupLoader"><div class="ring"></div><div class="label">正在启动 ' + escapeHtml2(ver.name) + '...</div></div>\n' +
+    '<div id="popupError"><div class="title">启动失败</div><div class="msg" id="popupErrorMsg"></div></div>\n' +
+    '<script src="./js/game.js"></script>\n' +
+    '<script>\n' +
+    '(function(){\n' +
+    '  window.MCJS_SETTINGS = ' + settingsJson + ';\n' +
+    '  var version = ' + verJson + ';\n' +
+    '  function showError(msg){\n' +
+    '    var loader = document.getElementById("popupLoader");\n' +
+    '    var err = document.getElementById("popupError");\n' +
+    '    var msgEl = document.getElementById("popupErrorMsg");\n' +
+    '    if(loader) loader.classList.add("hidden");\n' +
+    '    if(err) err.style.display = "flex";\n' +
+    '    if(msgEl) msgEl.textContent = msg || "未知错误";\n' +
+    '  }\n' +
+    '  try {\n' +
+    '    if(window.MCJS_GAME && window.MCJS_GAME.launch){\n' +
+    '      window.MCJS_GAME.launch(version,\n' +
+    '        function(text, pct){\n' +
+    '          var label = document.querySelector("#popupLoader .label");\n' +
+    '          if(label) label.textContent = text;\n' +
+    '        },\n' +
+    '        function(){\n' +
+    '          var loader = document.getElementById("popupLoader");\n' +
+    '          if(loader) setTimeout(function(){ loader.classList.add("hidden"); }, 500);\n' +
+    '        },\n' +
+    '        function(err){\n' +
+    '          showError(err || "启动失败");\n' +
+    '        }\n' +
+    '      );\n' +
+    '    } else {\n' +
+    '      showError("游戏模块加载失败");\n' +
+    '    }\n' +
+    '  } catch(e) {\n' +
+    '    showError(e.message || "启动异常");\n' +
+    '  }\n' +
+    '})();\n' +
+    '<\/script>\n' +
+    '</body>\n</html>';
+}
+
 function cancelCurrentLaunch(){
   console.log('[MCJS] Cancelling launch...');
   if (window.MCJS_GAME && window.MCJS_GAME.cancel) {
@@ -522,6 +778,7 @@ function cancelCurrentLaunch(){
   launchProgress.style.width = '0%';
   launchModal.classList.remove('active');
   if(sound) sound.close();
+  clearSessionState();
 }
 
 document.getElementById('gameCloseBtn').addEventListener('click', function(){
@@ -540,6 +797,7 @@ document.getElementById('gameCloseBtn').addEventListener('click', function(){
   }
   if(gameToolbar) gameToolbar.style.display = 'none';
   isLaunching = false;
+  clearSessionState();
 });
 
 document.getElementById('gameFullscreenBtn').addEventListener('click', function(){
@@ -568,6 +826,8 @@ var settingsBtn = document.getElementById('settingsBtn');
 
 function buildSettingsHTML() {
   var s = window.MCJS_SETTINGS || {};
+  // 确保 s 有默认值
+  s = ensureSettingsDefaults(s);
   function toggleChecked(val) { return val !== false ? 'active' : ''; }
   function toggleAria(val) { return val !== false ? 'true' : 'false'; }
 
@@ -593,6 +853,7 @@ function buildSettingsHTML() {
     '  --accent-red: #ef4444;\n' +
     '  --accent-red-bg: rgba(239, 68, 68, 0.10);\n' +
     '  --accent-blue: #3b82f6;\n' +
+    '  --accent-blue-bg: rgba(59, 130, 246, 0.10);\n' +
     '  --radius: 12px;\n' +
     '  --radius-sm: 8px;\n' +
     '  --radius-xs: 6px;\n' +
@@ -641,6 +902,9 @@ function buildSettingsHTML() {
     '.action-btn:hover { background:rgba(0,0,0,0.06); }\n' +
     '.action-btn.danger { color:var(--accent-red); }\n' +
     '.action-btn.danger:hover { background:var(--accent-red-bg); border-color:rgba(239,68,68,0.3); }\n' +
+    '.manual-opt-btn { display:block; width:100%; padding:10px 14px; margin-top:8px; background:var(--accent-blue-bg); color:var(--accent-blue); border:1px solid rgba(59,130,246,0.25); border-radius:8px; cursor:pointer; font-family:inherit; font-size:0.88rem; font-weight:600; transition:var(--transition); text-align:center; }\n' +
+    '.manual-opt-btn:hover { background:var(--accent-blue); color:#fff; border-color:var(--accent-blue); box-shadow:0 2px 12px rgba(59,130,246,0.25); }\n' +
+    '.manual-opt-btn:disabled { opacity:0.5; cursor:not-allowed; pointer-events:none; }\n' +
     '.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--accent-green); color:#fff; padding:10px 24px; border-radius:8px; font-weight:500; font-size:0.9rem; box-shadow:0 4px 16px rgba(34,197,94,0.30); opacity:0; transition:opacity 0.3s; pointer-events:none; z-index:999; }\n' +
     '.toast.show { opacity:1; }\n' +
     '.toast.error { background:var(--accent-red); box-shadow:0 4px 16px rgba(239,68,68,0.30); }\n' +
@@ -678,6 +942,10 @@ function buildSettingsHTML() {
     '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.quickLaunch) + '" id="settingQuickLaunch" type="button" role="switch" aria-checked="' + toggleAria(s.quickLaunch) + '"></button></div>\n' +
     '      </div>\n' +
     '      <div class="setting-item">\n' +
+    '        <div class="setting-label"><span>弹窗启动</span><small>在新窗口中启动游戏</small></div>\n' +
+    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.popupLaunch) + '" id="settingPopupLaunch" type="button" role="switch" aria-checked="' + toggleAria(s.popupLaunch) + '"></button></div>\n' +
+    '      </div>\n' +
+    '      <div class="setting-item">\n' +
     '        <div class="setting-label"><span>加载详情</span><small>显示详细的加载步骤信息</small></div>\n' +
     '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.loadingDetail) + '" id="settingLoadingDetail" type="button" role="switch" aria-checked="' + toggleAria(s.loadingDetail) + '"></button></div>\n' +
     '      </div>\n' +
@@ -708,6 +976,13 @@ function buildSettingsHTML() {
     '          </select>\n' +
     '        </div>\n' +
     '      </div>\n' +
+    '      <div class="setting-item" style="border-top:1px solid var(--border-soft); padding-top:12px; margin-top:4px; flex-direction:column; align-items:stretch;">\n' +
+    '        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">\n' +
+    '          <div class="setting-label"><span>手动内存优化</span><small>立即执行内存释放和垃圾回收</small></div>\n' +
+    '        </div>\n' +
+    '        <button class="manual-opt-btn" id="manualOptBtn" style="width:100%; margin-top:6px;">执行优化</button>\n' +
+    '        <div id="manualOptStatus" style="font-size:0.78rem; color:var(--text-muted); margin-top:4px; text-align:center;"></div>\n' +
+    '      </div>\n' +
     '    </div>\n' +
 
     '    <div class="settings-group">\n' +
@@ -727,7 +1002,7 @@ function buildSettingsHTML() {
     '      </div>\n' +
     '      <div class="cache-info" id="cacheInfo">\n' +
     '        <div class="cache-info-row"><span>已用缓存</span><strong id="cacheSizeText">读取中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>缓存文件</span><strong id="cacheFileCount"></strong></div>\n' +
+    '        <div class="cache-info-row"><span>缓存文件</span><strong id="cacheFileCount">读取中…</strong></div>\n' +
     '      </div>\n' +
     '      <button class="action-btn" id="clearCacheBtn">清除游戏缓存</button>\n' +
     '      <button class="action-btn danger" id="clearSaveBtn" style="margin-top:4px;">清除所有存档</button>\n' +
@@ -790,7 +1065,7 @@ function buildSettingsHTML() {
     '(function() {\n' +
     '  var settings = {};\n' +
     '  try { var stored = localStorage.getItem("mcjs_settings"); settings = stored ? JSON.parse(stored) : {}; } catch(e) {}\n' +
-    '  var defaults = { mirrorIndex:0, memoryLimit:512, autoClean:true, saveIsolation:true, gpuPrefer:"high-performance", cacheSizeLimit:2048, bgImage:true, soundEnabled:true, fullscreenLaunch:false, fontSize:"normal", cardDensity:"comfortable", autoUpdateCheck:true, loadingDetail:true, quickLaunch:false, reduceMotion:false };\n' +
+    '  var defaults = { mirrorIndex:0, memoryLimit:512, autoClean:true, saveIsolation:true, gpuPrefer:"high-performance", cacheSizeLimit:2048, bgImage:true, soundEnabled:true, fullscreenLaunch:false, fontSize:"normal", cardDensity:"comfortable", autoUpdateCheck:true, loadingDetail:true, quickLaunch:false, reduceMotion:false, popupLaunch:false };\n' +
     '  Object.keys(defaults).forEach(function(k){ if(settings[k]===undefined) settings[k]=defaults[k]; });\n' +
     '  var dirty = false;\n' +
     '  var toastTimer = null;\n' +
@@ -802,6 +1077,7 @@ function buildSettingsHTML() {
     '  function bindSlider(id, valueId, key, unit){ var el=document.getElementById(id); var valEl=document.getElementById(valueId); if(!el||!valEl)return; el.addEventListener("input", function(){ var v=parseInt(el.value); valEl.textContent=v+" "+unit; settings[key]=v; dirty=true; }); }\n' +
     '  bindToggle("settingFullscreen", "fullscreenLaunch");\n' +
     '  bindToggle("settingQuickLaunch", "quickLaunch");\n' +
+    '  bindToggle("settingPopupLaunch", "popupLaunch");\n' +
     '  bindToggle("settingLoadingDetail", "loadingDetail");\n' +
     '  bindToggle("settingAutoClean", "autoClean");\n' +
     '  bindToggle("settingSaveIsolation", "saveIsolation");\n' +
@@ -821,16 +1097,27 @@ function buildSettingsHTML() {
     '      window.opener.postMessage({ type: "get-cache-info" }, "*");\n' +
     '    }\n' +
     '  }\n' +
+    '  \n' +
+    '  var cacheInfoTimer = null;\n' +
+    '  \n' +
     '  window.addEventListener("message", function(e) {\n' +
     '    if (e.data && e.data.type === "cache-info-response") {\n' +
     '      var sizeEl = document.getElementById("cacheSizeText");\n' +
     '      var countEl = document.getElementById("cacheFileCount");\n' +
     '      if (sizeEl) sizeEl.textContent = e.data.sizeText || "0 B";\n' +
-    '      if (countEl) countEl.textContent = e.data.count + " 个文件";\n' +
+    '      if (countEl) countEl.textContent = (e.data.count !== undefined && e.data.count !== null) ? e.data.count + " 个文件" : "0 个文件";\n' +
     '    }\n' +
     '  });\n' +
-    '  requestCacheInfo();\n' +
-    '  setInterval(requestCacheInfo, 5000);\n' +
+    '  \n' +
+    '  function doRequestCacheInfo() {\n' +
+    '    if (window.opener) {\n' +
+    '      try { window.opener.postMessage({ type: "get-cache-info" }, "*"); } catch(e) {}\n' +
+    '    }\n' +
+    '  }\n' +
+    '  \n' +
+    '  doRequestCacheInfo();\n' +
+    '  if (cacheInfoTimer) clearInterval(cacheInfoTimer);\n' +
+    '  cacheInfoTimer = setInterval(doRequestCacheInfo, 3000);\n' +
     '  \n' +
     '  function saveAndClose() {\n' +
     '    try {\n' +
@@ -864,10 +1151,44 @@ function buildSettingsHTML() {
     '      saveAndClose();\n' +
     '    }\n' +
     '  });\n' +
+    '  \n' +
+    '  // ===== 手动内存优化 =====\n' +
+    '  var manualOptBtn = document.getElementById("manualOptBtn");\n' +
+    '  var manualOptStatus = document.getElementById("manualOptStatus");\n' +
+    '  if (manualOptBtn) {\n' +
+    '    manualOptBtn.addEventListener("click", function() {\n' +
+    '      if (manualOptBtn.disabled) return;\n' +
+    '      manualOptBtn.disabled = true;\n' +
+    '      manualOptBtn.textContent = "优化中...";\n' +
+    '      if (manualOptStatus) manualOptStatus.textContent = "正在释放内存...";\n' +
+    '      \n' +
+    '      if (window.opener && window.opener.MCJS_GAME && window.opener.MCJS_GAME.manualOptimize) {\n' +
+    '        window.opener.MCJS_GAME.manualOptimize(\n' +
+    '          function(text, pct) {\n' +
+    '            if (manualOptStatus) manualOptStatus.textContent = text + " (" + pct + "%)";\n' +
+    '          },\n' +
+    '          function() {\n' +
+    '            manualOptBtn.disabled = false;\n' +
+    '            manualOptBtn.textContent = "执行优化";\n' +
+    '            if (manualOptStatus) manualOptStatus.textContent = "优化完成";\n' +
+    '            showToast("内存优化完成");\n' +
+    '            setTimeout(function() { if (manualOptStatus) manualOptStatus.textContent = ""; }, 3000);\n' +
+    '          }\n' +
+    '        );\n' +
+    '      } else {\n' +
+    '        manualOptBtn.disabled = false;\n' +
+    '        manualOptBtn.textContent = "执行优化";\n' +
+    '        if (manualOptStatus) manualOptStatus.textContent = "无法连接主窗口";\n' +
+    '        showToast("无法执行内存优化", true);\n' +
+    '      }\n' +
+    '    });\n' +
+    '  }\n' +
+    '  \n' +
     '  document.getElementById("clearCacheBtn").addEventListener("click", function(){\n' +
     '    if(confirm("确定要清除所有游戏缓存吗？")){\n' +
     '      showToast("缓存已清除");\n' +
     '      if(window.opener) window.opener.postMessage({ type: "clear-cache" }, "*");\n' +
+    '      setTimeout(doRequestCacheInfo, 500);\n' +
     '    }\n' +
     '  });\n' +
     '  document.getElementById("clearSaveBtn").addEventListener("click", function(){\n' +
@@ -876,22 +1197,41 @@ function buildSettingsHTML() {
     '      if(window.opener) window.opener.postMessage({ type: "clear-save" }, "*");\n' +
     '    }\n' +
     '  });\n' +
+    '  window.addEventListener("beforeunload", function(e){\n' +
+    '    if(dirty){\n' +
+    '      e.preventDefault();\n' +
+    '      e.returnValue = "";\n' +
+    '      return "";\n' +
+    '    }\n' +
+    '  });\n' +
     '})();\n' +
     '<\/script>\n' +
     '</body>\n</html>';
 }
 
 function openSettingsWindow() {
+  // 防止重复打开
+  if (settingsOpening) {
+    if (settingsWindow && !settingsWindow.closed) {
+      settingsWindow.focus();
+    }
+    return;
+  }
+  
   if (settingsWindow && !settingsWindow.closed) {
     settingsWindow.focus();
     return;
   }
+  
+  settingsOpening = true;
+  
   if (sound) sound.unlock();
   if (sound) sound.open();
 
   var html = buildSettingsHTML();
   var win = window.open('', '_blank', 'width=560,height=700,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes');
   if (!win) {
+    settingsOpening = false;
     alert('弹窗被拦截，请允许此站点弹出窗口。');
     return;
   }
@@ -906,6 +1246,11 @@ function openSettingsWindow() {
     alert('无法打开设置窗口，请检查浏览器设置。');
     settingsWindow = null;
   }
+  
+  // 延迟重置锁
+  setTimeout(function() {
+    settingsOpening = false;
+  }, 1000);
 }
 
 window.addEventListener('message', function(e) {
@@ -914,6 +1259,8 @@ window.addEventListener('message', function(e) {
   if (data.type === 'settings-updated') {
     var newSettings = data.settings;
     if (newSettings) {
+      // 确保新设置也有默认值
+      newSettings = ensureSettingsDefaults(newSettings);
       window.MCJS_SETTINGS = newSettings;
       window.MCJS_SAVE_SETTINGS(newSettings);
       settings = newSettings;
@@ -969,9 +1316,27 @@ settingsBtn.addEventListener('click', function(){
 
 document.addEventListener('keydown', function(e){
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  
   if(e.key === ',' && (e.ctrlKey || e.metaKey)){
     e.preventDefault();
     openSettingsWindow();
+  }
+  
+  if(e.key === '/' && (e.ctrlKey || e.metaKey)){
+    e.preventDefault();
+    if(searchInput) searchInput.focus();
+  }
+  
+  if(e.key === 'Escape'){
+    if(gameOverlay && gameOverlay.classList.contains('active')){
+      cancelCurrentLaunch();
+    }
+    if(launchModal && launchModal.classList.contains('active')){
+      launchModal.classList.remove('active');
+    }
+    if(launchFailedModal && launchFailedModal.classList.contains('active')){
+      launchFailedModal.classList.remove('active');
+    }
   }
 });
 
@@ -984,7 +1349,9 @@ function applyBackground(){
   }
 }
 function applyTheme(){
-  if(settings.reduceMotion){
+  // 确保 reduceMotion 默认是 false
+  var reduce = (settings.reduceMotion === true);
+  if(reduce){
     document.body.classList.add('no-anim');
   }else{
     document.body.classList.remove('no-anim');
@@ -1175,30 +1542,159 @@ function attachHoverSound(root){
   };
 })();
 
-/* ========== 初始化 ========== */
-(function init(){
-  sound = new SoundManager();
-  sound.setEnabled(settings.soundEnabled !== false);
-  renderGrid();
-  attachHoverSound(document);
-
-  var wasmInfo = checkWasmSupport();
-  if (!wasmInfo.supported) {
-    console.warn('[MCJS] WebAssembly not supported - polyfill will be used');
-    var warnEl = document.getElementById('wasmWarning');
-    if (warnEl) {
-      var textEl = document.getElementById('wasmWarningText');
-      if (textEl) {
-        textEl.textContent = '您的浏览器不支持 WebAssembly，启动游戏时将自动使用兼容模式（性能可能下降）';
+/* ========== FAQ 手风琴 ========== */
+function initFAQAccordion(){
+  if(window.__MCJS_FAQ_INIT__) return;
+  window.__MCJS_FAQ_INIT__ = true;
+  try {
+    var faqItems = document.querySelectorAll('.faq-item');
+    if(!faqItems || faqItems.length === 0) {
+      console.warn('[MCJS] No FAQ items found');
+      return;
+    }
+    
+    faqItems.forEach(function(item){
+      // 跳过已绑定
+      if(item.__mcjsBound) return;
+      item.__mcjsBound = true;
+      
+      var question = item.querySelector('.faq-question');
+      if(!question) return;
+      
+      question.setAttribute('role', 'button');
+      question.setAttribute('tabindex', '0');
+      question.setAttribute('aria-expanded', 'false');
+      
+      var answer = item.querySelector('.faq-answer');
+      if(answer){
+        answer.setAttribute('role', 'region');
       }
-      warnEl.style.display = 'flex';
+      
+      function toggle(e){
+        if(e){ e.preventDefault(); e.stopPropagation(); }
+        var isOpen = item.classList.contains('active');
+        
+        // 关闭其他
+        faqItems.forEach(function(otherItem){
+          if(otherItem !== item && otherItem.classList.contains('active')){
+            otherItem.classList.remove('active');
+            var otherQ = otherItem.querySelector('.faq-question');
+            if(otherQ) otherQ.setAttribute('aria-expanded', 'false');
+          }
+        });
+        
+        if(isOpen){
+          item.classList.remove('active');
+          question.setAttribute('aria-expanded', 'false');
+        }else{
+          item.classList.add('active');
+          question.setAttribute('aria-expanded', 'true');
+        }
+        try { if(sound) sound.click(); } catch(_){}
+      }
+      
+      // 使用普通 click 和 keydown,不依赖 stopPropagation
+      question.addEventListener('click', toggle);
+      question.addEventListener('keydown', function(e){
+        if(e.key === 'Enter' || e.key === ' ' || e.keyCode === 13 || e.keyCode === 32){
+          toggle(e);
+        }
+      });
+    });
+    
+    console.log('[MCJS] FAQ accordion initialized with', faqItems.length, 'items');
+  } catch(err) {
+    console.error('[MCJS] FAQ init failed:', err);
+  }
+}
+
+/* ========== 初始化 ========== */
+function safeRun(fn, label){
+  try { fn(); }
+  catch(e){ console.error('[MCJS] ' + (label||'init') + ' failed:', e); }
+}
+
+(function init(){
+  console.log('[MCJS] init start, readyState:', document.readyState);
+  
+  // 再次确保设置正确
+  settings = ensureSettingsDefaults(window.MCJS_SETTINGS || {});
+  window.MCJS_SETTINGS = settings;
+  
+  if(settings.bgImage === false){ document.body.classList.add('no-bg'); }
+  safeRun(applyTheme, 'applyTheme');
+  safeRun(applyFontSize, 'applyFontSize');
+  safeRun(applyCardDensity, 'applyCardDensity');
+  
+  // 暴露全局调试钩子
+  window.MCJS = window.MCJS || {};
+  window.MCJS.reloadVersions = function(){ safeRun(renderGrid, 'renderGrid'); };
+  window.MCJS.openFAQ = function(idx){
+    var items = document.querySelectorAll('.faq-item');
+    if(items[idx]){ items[idx].querySelector('.faq-question').click(); }
+  };
+  
+  function bootUI(){
+    safeRun(renderGrid, 'renderGrid');
+    safeRun(function(){ attachHoverSound(document); }, 'attachHoverSound');
+    safeRun(initFAQAccordion, 'initFAQAccordion');
+    safeRun(updateSearchClearBtn, 'updateSearchClearBtn');
+    
+    requestAnimationFrame(function(){
+      try {
+        sound = new SoundManager();
+        sound.setEnabled(settings.soundEnabled !== false);
+        // 暴露给插件市场/编辑器等模块使用
+        window.MCJS = window.MCJS || {};
+        window.MCJS.sound = sound;
+      } catch(e) { console.warn('[MCJS] Sound init failed:', e); }
+      
+      var wasmInfo = safeRun(checkWasmSupport, 'checkWasmSupport');
+      if (wasmInfo && !wasmInfo.supported) {
+        console.warn('[MCJS] WebAssembly not supported - polyfill will be used');
+        var warnEl = document.getElementById('wasmWarning');
+        if (warnEl) {
+          var textEl = document.getElementById('wasmWarningText');
+          if (textEl) {
+            textEl.textContent = '您的浏览器不支持 WebAssembly，启动游戏时将自动使用兼容模式（性能可能下降）';
+          }
+          warnEl.style.display = 'flex';
+        }
+      }
+      
+      var skeleton = document.getElementById('loadingSkeleton');
+      if(skeleton){
+        skeleton.style.opacity = '0';
+        setTimeout(function(){ 
+          if(skeleton.parentNode) skeleton.parentNode.removeChild(skeleton); 
+        }, 300);
+      }
+      
+      try {
+        var state = loadSessionState();
+        if (state && state.isGameRunning && state.lastVersion) {
+          var ver = window.VERSIONS && window.VERSIONS.find ? window.VERSIONS.find(function(v) { return v.id === state.lastVersion; }) : null;
+          if (!ver) {
+            ver = VERSIONS.find(function(v) { return v.id === state.lastVersion; });
+          }
+          if (ver) {
+            setTimeout(function() { showRestoreBanner(ver); }, 800);
+          }
+        }
+      } catch(e) { console.warn('[MCJS] session restore failed:', e); }
+    });
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootUI);
+  } else {
+    // 已 ready,立即跑
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(bootUI);
+    } else {
+      setTimeout(bootUI, 0);
     }
   }
-
-  if(settings.bgImage === false){ document.body.classList.add('no-bg'); }
-  applyTheme();
-  applyFontSize();
-  applyCardDensity();
 })();
 
 var _origRenderGrid = renderGrid;
@@ -1215,6 +1711,415 @@ if('serviceWorker' in navigator){
       console.warn('[MCJS] SW registration failed:', err);
     });
   });
+}
+
+/* ========== Toast 通知 ========== */
+function showToast(msg, type) {
+  var container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  var t = document.createElement('div');
+  t.className = 'toast toast-' + (type || 'info');
+  var icon = type === 'success' ? '✓' : type === 'error' ? '✕' : type === 'warn' ? '⚠' : 'ℹ';
+  t.innerHTML = '<span class="toast-icon">' + icon + '</span><span class="toast-text">' + escapeHtml2(msg) + '</span>';
+  container.appendChild(t);
+  setTimeout(function() { t.classList.add('show'); }, 10);
+  setTimeout(function() {
+    t.classList.remove('show');
+    setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 350);
+  }, 3500);
+}
+function escapeHtml2(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+window.MCJS_TOAST = showToast;
+window.MCJS_ESCAPE_HTML = escapeHtml2;
+
+/* ========== 插件系统 UI 绑定 ========== */
+(function bindPluginUI() {
+  function openPluginMarket() {
+    if (window.MCJS_PLUGIN_MARKET) window.MCJS_PLUGIN_MARKET.open();
+    else showToast('插件市场尚未加载', 'error');
+  }
+  function openPluginEditor() {
+    if (window.MCJS_PLUGIN_EDITOR) window.MCJS_PLUGIN_EDITOR.open();
+    else showToast('插件编辑器尚未加载', 'error');
+  }
+  function showPluginDocs() {
+    openPluginMarket();
+    setTimeout(function() {
+      var tabs = document.querySelectorAll('#pluginMarketModal .plugin-tab');
+      var docsTab = null;
+      tabs.forEach(function(t) { if (t.getAttribute('data-tab') === 'docs') docsTab = t; });
+      if (docsTab) docsTab.click();
+    }, 80);
+  }
+
+  var pmBtn = document.getElementById('pluginMarketBtn');
+  if (pmBtn) pmBtn.addEventListener('click', openPluginMarket);
+  var peBtn = document.getElementById('pluginEditorBtn');
+  if (peBtn) peBtn.addEventListener('click', openPluginEditor);
+  var heroMarket = document.getElementById('openPluginMarket');
+  if (heroMarket) heroMarket.addEventListener('click', openPluginMarket);
+  var heroDocs = document.getElementById('openPluginDocs');
+  if (heroDocs) heroDocs.addEventListener('click', showPluginDocs);
+
+  // WASM 警告 → 跳转插件市场(只在"前往插件市场"按钮上绑定,关闭按钮由上面的逻辑处理)
+  var wasmAction = document.getElementById('wasmWarningAction');
+  if (wasmAction) wasmAction.addEventListener('click', function() {
+    openPluginMarket();
+    var warn = document.getElementById('wasmWarning');
+    if (warn) warn.style.display = 'none';
+  });
+
+  // 已启用插件列表
+  function categoryTag(cat) {
+    // 纯文字标签,与 plugin-market 保持一致
+    return ({
+      compatibility: 'COMPAT',
+      performance: 'PERF',
+      appearance: 'STYLE',
+      utility: 'UTIL',
+      language: 'I18N',
+      custom: 'CUSTOM'
+    })[cat] || 'PLUGIN';
+  }
+  function renderInstalledPluginsList() {
+    var section = document.getElementById('installedPluginsSection');
+    var listEl = document.getElementById('installedPluginsList');
+    var countEl = document.getElementById('installedPluginsCount');
+    if (!section || !listEl) return;
+    if (!window.MCJS_REGISTRY) return;
+    var enabled = window.MCJS_REGISTRY.list().filter(function(p) {
+      return window.MCJS_REGISTRY.isEnabled(p.id);
+    });
+    // 主页不再展示已安装插件面板(避免冗余入口,统一在插件市场的"已安装"tab 管理)
+    section.style.display = 'none';
+    if (countEl) countEl.textContent = enabled.length + ' 个插件已启用';
+  }
+
+  var manageBtn = document.getElementById('managePluginsBtn');
+  if (manageBtn) manageBtn.addEventListener('click', openPluginMarket);
+
+  // 事件总线
+  if (window.MCJS_EVENTS) {
+    window.MCJS_EVENTS.on('plugin:enable', function() { setTimeout(renderInstalledPluginsList, 50); });
+    window.MCJS_EVENTS.on('plugin:disable', function() { setTimeout(renderInstalledPluginsList, 50); });
+    window.MCJS_EVENTS.on('plugin:install', function() { setTimeout(renderInstalledPluginsList, 50); });
+    window.MCJS_EVENTS.on('plugin:uninstall', function() { setTimeout(renderInstalledPluginsList, 50); });
+  }
+
+  // 文档标签渲染
+  function renderPluginDocs() {
+    var container = document.getElementById('pluginDocsContainer');
+    if (!container) return;
+    container.innerHTML = buildPluginDocsHTML();
+  }
+
+  // 初始 + 监听
+  setTimeout(function() {
+    renderInstalledPluginsList();
+    renderPluginDocs();
+  }, 500);
+
+  // 暴露给 plugin-market 调用
+  window.MCJS_DOCS_RENDER = renderPluginDocs;
+})();
+
+/* ========== 插件开发文档(中文) ========== */
+function buildPluginDocsHTML() {
+  var hookPoints = window.MCJS_HOOK_POINTS || [];
+  var events = window.MCJS_EVENT_NAMES || [];
+  var perms = (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API.PERMS) || {};
+
+  function hookList() {
+    return hookPoints.map(function(h) {
+      return '<li><code>' + escapeHtml2(h.name) + '</code><span class="plugin-doc-args">(' + escapeHtml2(h.args) + ') → ' + escapeHtml2(h.returns) + '</span><div class="plugin-doc-desc">' + escapeHtml2(h.desc) + '</div></li>';
+    }).join('');
+  }
+  function eventList() {
+    return events.map(function(e) { return '<li><code>' + escapeHtml2(e) + '</code></li>'; }).join('');
+  }
+  function permList() {
+    return Object.keys(perms).map(function(k) {
+      return '<li><code>' + escapeHtml2(k) + '</code> - ' + escapeHtml2(perms[k]) + '</li>';
+    }).join('');
+  }
+
+  return [
+    '<div class="plugin-docs-content">',
+
+    '<section class="plugin-doc-section">',
+    '<h3>快速开始</h3>',
+    '<p>MCJS 插件以 <strong>JSON manifest + JS 源码</strong> 形式存在。你可以通过以下方式创建插件:</p>',
+    '<ol>',
+    '<li>打开"编写"标签,选择模板并填写元数据</li>',
+    '<li>在 <code>inject.js</code> 中编写游戏注入代码</li>',
+    '<li>点击"保存"即可自动安装并启用</li>',
+    '<li>也可以"导出"为 <code>.mcjs-plugin.json</code> 文件,以后通过"导入插件"加载</li>',
+    '</ol>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>插件结构</h3>',
+    '<pre class="plugin-doc-code">',
+'{\n' +
+'  "id": "my.plugin-id",            // 唯一 ID(必须)\n' +
+'  "name": "我的插件",              // 显示名\n' +
+'  "version": "1.0.0",              // 语义化版本\n' +
+'  "author": "Your Name",           // 作者\n' +
+'  "category": "utility",           // 分类:compatibility/performance/appearance/utility/language/custom\n' +
+'  "description": "插件简介",       // 简短描述\n' +
+'  "hooks": ["launch:html"],        // 监听哪些钩子点\n' +
+'  "permissions": ["game.inject"],  // 申请权限\n' +
+'  "files": {                       // 多文件源码(可选)\n' +
+'    "main.js": "...",\n' +
+'    "inject.js": "...",\n' +
+'    "style.css": "..."\n' +
+'  },\n' +
+'  "code": "..."                    // 兼容字段(纯 JS 注入时用)\n' +
+'}',
+'</pre>',
+    '<p>当 manifest 包含 <code>code</code> 字段或 <code>files.inject.js</code> 时,该内容会在 <code>launch:html</code> 钩子触发时被注入到游戏页面 <code>&lt;head&gt;</code> 中。</p>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>钩子点 (Hooks)</h3>',
+    '<p>插件通过 <code>hooks</code> 字段声明它要监听的钩子。系统会按优先级顺序依次调用所有插件的对应钩子,返回的新值会传递给下一个钩子。</p>',
+    '<ul class="plugin-doc-list">' + hookList() + '</ul>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>事件 (Events)</h3>',
+    '<p>通过 <code>api.on(eventName, fn)</code> 监听事件。事件名列表:</p>',
+    '<ul class="plugin-doc-list">' + eventList() + '</ul>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>权限 (Permissions)</h3>',
+    '<p>插件必须显式声明所需权限,启动器 UI 中会展示给用户。</p>',
+    '<ul class="plugin-doc-list">' + permList() + '</ul>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>API 参考</h3>',
+    '<h4>api.on(eventName, callback)</h4>',
+    '<p>监听启动器事件,返回取消监听的函数。</p>',
+    '<h4>api.getSetting(key, defaultValue)</h4>',
+    '<p>读取本插件的配置项(持久化在 localStorage)。</p>',
+    '<h4>api.setSetting(key, value)</h4>',
+    '<p>写入本插件的配置项。</p>',
+    '<h4>api.storage.getItem(key) / setItem(key, value)</h4>',
+    '<p>键值存储,数据完全隔离于其他插件。</p>',
+    '<h4>api.fetch(url, opts)</h4>',
+    '<p>网络请求包装(credentials 默认 omit)。</p>',
+    '<h4>api.toast(message, type)</h4>',
+    '<p>显示一条 toast 通知。type 可选 <code>info/success/warn/error</code>。</p>',
+    '<h4>api.ui.addButton / addPanel</h4>',
+    '<p>向启动器 UI 中动态添加按钮或面板。</p>',
+    '<h4>api.injectScript(pluginId, jsCode) / injectCSS(pluginId, cssCode)</h4>',
+    '<p>在游戏 iframe 中注入脚本或样式(异步,返回 Promise)。</p>',
+    '<h4>api.launchContext.getCurrent()</h4>',
+    '<p>读取当前正在启动的版本上下文(版本对象、镜像 URL、起始时间)。</p>',
+    '<h4>api.plugins.list() / isInstalled(id) / get(id)</h4>',
+    '<p>查询已安装的其他插件。</p>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>实战示例</h3>',
+
+    '<h4>① 注入游戏时打印日志</h4>',
+    '<pre class="plugin-doc-code">',
+'// manifest.json\n' +
+'{\n' +
+'  "id": "demo.log",\n' +
+'  "name": "日志示例",\n' +
+'  "version": "1.0.0",\n' +
+'  "author": "demo",\n' +
+'  "category": "utility",\n' +
+'  "description": "在控制台打印启动日志",\n' +
+'  "hooks": ["launch:html"],\n' +
+'  "permissions": ["game.inject"]\n' +
+'}\n\n' +
+'// inject.js\n' +
+'(function(){\n' +
+'  console.log("[Demo] 插件已注入,版本:", window.__MCJS_LAUNCH_CONTEXT__?.version?.id);\n' +
+'  // 在游戏页 head 中插入自定义样式\n' +
+'  var s = document.createElement("style");\n' +
+'  s.textContent = "body::before { content: \'Plugin Loaded\'; position:fixed; top:0; left:0; background:#22c55e; color:#fff; padding:2px 6px; z-index:99999; font:12px monospace; }";\n' +
+'  document.head.appendChild(s);\n' +
+'})();',
+'</pre>',
+
+    '<h4>② 修改启动参数,强制全屏</h4>',
+    '<pre class="plugin-doc-code">',
+'// manifest.json (关键字段)\n' +
+'"hooks": ["launch:version"]\n\n' +
+'// main.js (由系统调用,args 是 version 对象)\n' +
+'"builtin": function(){\n' +
+'  return {\n' +
+'    inject: function(ctx) { return null; },\n' +
+'    onLaunchVersion: function(version) {\n' +
+'      version.forceFullscreen = true;\n' +
+'      return version;\n' +
+'    }\n' +
+'  };\n' +
+'}',
+'</pre>',
+
+    '<h4>③ 动态添加镜像(去广告/换源)</h4>',
+    '<pre class="plugin-doc-code">',
+'// manifest.json\n' +
+'"hooks": ["launch:mirrors"]\n\n' +
+'// inject logic - 直接修改 mirrors 数组\n' +
+'// 详见插件编写器 → 模板: "修改镜像列表"\n',
+'</pre>',
+
+    '<h4>④ 监听事件实现自动备份</h4>',
+    '<pre class="plugin-doc-code">',
+'// 在 main.js 中\nexport default function(api) {\n' +
+'  api.on("game:close", function() {\n' +
+'    var data = api.storage.getItem("lastBackup") || "[]";\n' +
+'    var list = JSON.parse(data);\n' +
+'    list.push({ ts: Date.now() });\n' +
+'    api.storage.setItem("lastBackup", JSON.stringify(list));\n' +
+'    api.toast("已记录关闭时间", "info");\n' +
+'  });\n' +
+'  return {};\n' +
+'}',
+'</pre>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>安全与限制</h3>',
+    '<ul>',
+    '<li>所有插件 JS 在 <strong>同一 window 上下文</strong> 运行,无法完全隔离。导入第三方插件时务必检查源码。</li>',
+    '<li>对游戏 iframe 的注入通过 <code>srcdoc</code> + <code>data-mcjs-plugin</code> 属性标记,可在控制台审查。</li>',
+    '<li>权限仅是 UI 提示,不构成技术限制;官方插件会在描述中清楚说明行为。</li>',
+    '<li>插件存储完全独立(<code>mcjs_plugin_storage</code> 键),卸载时会被清除。</li>',
+    '<li>若插件代码导致游戏异常,直接到"插件市场 → 已安装"中禁用即可。</li>',
+    '</ul>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>远程加载 / 第三方市场</h3>',
+    '<p>MCJS v3.0 开放了插件加载链路,支持以下方式从远程安装插件:</p>',
+    '<ol>',
+    '<li><strong>添加第三方仓库</strong>:在远程仓库标签点击 "添加仓库",填入任何符合协议的 JSON manifest 地址。</li>',
+    '<li><strong>URL 直接导入</strong>:在 "浏览" 标签底部粘贴 URL(GitHub raw、CDN、个人服务器),选择要安装的插件即可。</li>',
+    '<li><strong>本地文件导入</strong>:点击 "导入文件" 选择本地 <code>.json</code> 插件文件。</li>',
+    '</ol>',
+    '<p><strong>Manifest 协议</strong>(远程仓库 JSON):</p>',
+    '<pre class="plugin-doc-code">',
+'{\n' +
+'  "name": "我的插件市场",\n' +
+'  "version": "1.0.0",\n' +
+'  "plugins": [\n' +
+'    {\n' +
+'      "id": "author.plugin-name",\n' +
+'      "name": "插件名",\n' +
+'      "version": "1.0.0",\n' +
+'      "author": "Your Name",\n' +
+'      "category": "utility",\n' +
+'      "description": "插件描述",\n' +
+'      "hooks": ["launch:html"],\n' +
+'      "permissions": ["game.inject"],\n' +
+'      "url": "https://.../plugin-name/manifest.json"  // 插件完整 manifest\n' +
+'    }\n' +
+'  ]\n' +
+'}',
+'</pre>',
+    '<p>如果是单个插件 URL,manifest 直接是插件对象本身(无 <code>plugins</code> 数组)。</p>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>签名验证</h3>',
+    '<p>为了保证插件来源可信,MCJS 支持在 manifest 中嵌入 <strong>SHA-256 签名</strong>。校验流程:</p>',
+    '<ol>',
+    '<li>系统拉取插件 manifest</li>',
+    '<li>从 manifest 移除 <code>signature</code> / <code>signatureType</code> / <code>publicKey</code> 字段</li>',
+    '<li>对剩余 JSON 做 SHA-256 哈希</li>',
+    '<li>与 <code>signature</code> 字段对比,相等则通过</li>',
+    '</ol>',
+    '<p>在 manifest 中加入签名:</p>',
+    '<pre class="plugin-doc-code">',
+'{\n' +
+'  "id": "my.plugin",\n' +
+'  "name": "My Plugin",\n' +
+'  "version": "1.0.0",\n' +
+'  "hooks": ["launch:html"],\n' +
+'  "permissions": ["game.inject"],\n' +
+'  "code": "...",\n' +
+'  "signatureType": "sha256",\n' +
+'  "signature": "abc123...64位hex..."\n' +
+'}',
+'</pre>',
+    '<p>生成 SHA-256 签名的脚本示例(Node.js):</p>',
+    '<pre class="plugin-doc-code">',
+'const crypto = require("crypto");\n' +
+'const fs = require("fs");\n' +
+'const plugin = JSON.parse(fs.readFileSync("plugin.json", "utf8"));\n' +
+'const p = Object.assign({}, plugin);\n' +
+'delete p.signature;\n' +
+'delete p.signatureType;\n' +
+'delete p.publicKey;\n' +
+'const ordered = Object.keys(p).sort().reduce((o,k)=>(o[k]=p[k],o),{});\n' +
+'const hash = crypto.createHash("sha256")\n' +
+'  .update(JSON.stringify(ordered))\n' +
+'  .digest("hex");\n' +
+'plugin.signatureType = "sha256";\n' +
+'plugin.signature = hash;\n' +
+'fs.writeFileSync("plugin.signed.json", JSON.stringify(plugin, null, 2));',
+'</pre>',
+    '<p>高安全场景推荐使用 <strong>RSA-SHA256</strong>(<code>signatureType: "rsa-sha256"</code>),通过公钥验证作者身份。</p>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>最佳实践</h3>',
+    '<ul>',
+    '<li><strong>幂等注入</strong>:用 <code>window.__MCJS_xxx__</code> 标记,避免重复注入。例:<code>if (window.__MCJS_MY_PLUGIN__) return;</code></li>',
+    '<li><strong>捕获异常</strong>:用 <code>try/catch</code> 包装逻辑,失败时 <code>console.warn</code> 而非崩溃游戏。</li>',
+    '<li><strong>少改动 DOM</strong>:优先用 CSS 样式,避免删除节点导致游戏逻辑异常。</li>',
+    '<li><strong>暴露开关</strong>:用 <code>api.getSetting("enabled", true)</code> 让用户可关闭插件副作用。</li>',
+    '<li><strong>语义化版本</strong>:每次改动递增 <code>version</code>(<code>MAJOR.MINOR.PATCH</code>),让更新检查能识别。</li>',
+    '<li><strong>描述清楚权限</strong>:<code>permissions</code> 字段会展示给用户,越具体越能获得信任。</li>',
+    '<li><strong>提供卸载说明</strong>:在 <code>description</code> 中说明插件做了什么,以便用户判断是否需要。</li>',
+    '<li><strong>签名发布</strong>:发布到第三方市场时附上 SHA-256 签名,用户可一键验证完整性。</li>',
+    '</ul>',
+    '</section>',
+
+    '<section class="plugin-doc-section">',
+    '<h3>贡献与发布</h3>',
+    '<p>想把你的插件分享给社区?</p>',
+    '<ol>',
+    '<li>在 "插件编写器" 编写并测试你的插件</li>',
+    '<li>点击 "导出" 下载 <code>.mcjs-plugin.json</code></li>',
+    '<li>把文件放到任何 HTTPS 可访问的位置(自己的服务器、GitHub Pages、CDN)</li>',
+    '<li>构建一个 manifest.json 列出你的所有插件:</li>',
+    '</ol>',
+    '<pre class="plugin-doc-code">',
+'{\n' +
+'  "name": "我的市场",\n' +
+'  "version": "1.0.0",\n' +
+'  "plugins": [\n' +
+'    { "id": "my.plugin-a", "version": "1.0.0", "name": "插件A", "url": "https://me.com/a.json" },\n' +
+'    { "id": "my.plugin-b", "version": "1.0.0", "name": "插件B", "url": "https://me.com/b.json" }\n' +
+'  ]\n' +
+'}',
+'</pre>',
+    '<ol start="5">',
+    '<li>分享你的 manifest URL,任何用户都可以在 "远程仓库 → 添加仓库" 中订阅</li>',
+    '</ol>',
+    '<p>MCJS 不强制审核 — 用户可自由添加任何来源,信任级别由用户自决(官方 / 社区 / 不信任)。</p>',
+    '</section>',
+
+    '</div>'
+  ].join('');
 }
 
 })();
