@@ -428,24 +428,39 @@ function checkIDBAvailable(){
     return false;
   }
 }
+function checkIDBAvailableAsync(){
+  if(_idbAvailable !== null) return Promise.resolve(_idbAvailable);
+  return new Promise(function(resolve){
+    try{
+      if(typeof indexedDB === 'undefined'){ _idbAvailable = false; resolve(false); return; }
+      var test = indexedDB.open('__mcjs_test__');
+      test.onerror = function(){ _idbAvailable = false; resolve(false); };
+      test.onsuccess = function(){
+        _idbAvailable = true;
+        try{ indexedDB.deleteDatabase('__mcjs_test__'); }catch(e){}
+        resolve(true);
+      };
+    }catch(e){ _idbAvailable = false; resolve(false); }
+  });
+}
 
 function openDB(){
-  if(!checkIDBAvailable()){
-    return Promise.reject(new Error('IndexedDB not available'));
-  }
-  return new Promise(function(resolve,reject){
-    var req=indexedDB.open(DB_NAME,DB_VERSION);
-    req.onupgradeneeded=function(e){
-      var db=e.target.result;
-      if(!db.objectStoreNames.contains(STORE_GAME))db.createObjectStore(STORE_GAME);
-      if(!db.objectStoreNames.contains(STORE_SAVE))db.createObjectStore(STORE_SAVE);
-      if(!db.objectStoreNames.contains(STORE_META))db.createObjectStore(STORE_META);
-    };
-    req.onsuccess=function(e){resolve(e.target.result);};
-    req.onerror=function(e){
-      _idbAvailable = false;
-      reject(e.target.error);
-    };
+  return checkIDBAvailableAsync().then(function(available){
+    if(!available) throw new Error('IndexedDB not available');
+    return new Promise(function(resolve,reject){
+      var req=indexedDB.open(DB_NAME,DB_VERSION);
+      req.onupgradeneeded=function(e){
+        var db=e.target.result;
+        if(!db.objectStoreNames.contains(STORE_GAME))db.createObjectStore(STORE_GAME);
+        if(!db.objectStoreNames.contains(STORE_SAVE))db.createObjectStore(STORE_SAVE);
+        if(!db.objectStoreNames.contains(STORE_META))db.createObjectStore(STORE_META);
+      };
+      req.onsuccess=function(e){resolve(e.target.result);};
+      req.onerror=function(e){
+        _idbAvailable = false;
+        reject(e.target.error);
+      };
+    });
   });
 }
 
@@ -990,7 +1005,7 @@ function launchGame(version,onProgress,onReady,onError){
           } catch (e) { console.warn('[MCJS] launch:html hook error:', e); }
         }
         // 收集插件注入项
-        var pluginInjects = collectPluginInjects('launch:html');
+        var pluginInjects = collectPluginInjects('launch:html', { version: version, mirrorURL: mirrorURL });
 
         var scripts=[];
         var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(settings.memoryLimit)+';';
@@ -1020,7 +1035,7 @@ function launchGame(version,onProgress,onReady,onError){
             if (typeof mod === 'string' && mod.length > 0) html = mod;
           } catch (e) {}
         }
-        var pluginInjects = collectPluginInjects('launch:html');
+        var pluginInjects = collectPluginInjects('launch:html', { version: version, mirrorURL: mirrorURL });
         var modifiedHTML=injectIntoHTML(html,[],mirrorURL,pluginInjects);
         loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady,onError);
       }).catch(function(err2){
@@ -1033,17 +1048,17 @@ function launchGame(version,onProgress,onReady,onError){
 /* 收集由插件生成的待注入项(JS / CSS)
    直接调用每个已启用插件实例的 inject() 接口,
    plugin.inject({hook: 'launch:html', args: ...}) 应返回 {type, content} 或 null */
-function collectPluginInjects(hookName) {
+function collectPluginInjects(hookName, hookArgs) {
   var out = [];
-  // 1. 直接遍历插件实例调用 inject
   var instances = window.__MCJS_PLUGIN_INSTANCES__ || {};
   Object.keys(instances).forEach(function(pluginId) {
     var inst = instances[pluginId];
     var plugin = window.MCJS_REGISTRY ? window.MCJS_REGISTRY.get(pluginId) : null;
     if (!inst || typeof inst.inject !== 'function') return;
     if (plugin && plugin.hooks && plugin.hooks.indexOf(hookName) === -1) return;
+    if (window.MCJS_REGISTRY && !window.MCJS_REGISTRY.isEnabled(pluginId)) return;
     try {
-      var result = inst.inject({ hook: hookName, args: null });
+      var result = inst.inject({ hook: hookName, args: hookArgs || null });
       if (result && result.content) {
         out.push({
           pluginId: pluginId,
@@ -1053,16 +1068,15 @@ function collectPluginInjects(hookName) {
       }
     } catch (e) { console.warn('[MCJS] Plugin inject call failed:', pluginId, e); }
   });
-  // 2. 兼容旧机制:从全局队列中拉取
-  if (window.__MCJS_PENDING_INJECTS__ && window.__MCJS_PENDING_INJECTS__.length) {
-    out = out.concat(window.__MCJS_PENDING_INJECTS__);
-    window.__MCJS_PENDING_INJECTS__ = [];
-  }
   return out;
 }
 
 function tryFallbackMirror(version,startIndex,onProgress,onReady,onError,lastErr){
   var mirrors=version.mirrors;
+  if(!Array.isArray(mirrors) || mirrors.length === 0){
+    giveUpAllMirrors(version,onError,lastErr);
+    return;
+  }
   var settings=window.MCJS_SETTINGS;
   var alreadyTried=Math.max(settings.mirrorIndex||0,0);
   if(startIndex===0)startIndex=(alreadyTried+1)%mirrors.length;
@@ -1162,7 +1176,7 @@ function loadGameInFrame(version,html,mirrorURL,onProgress,onReady,onError){
 
   // 收集 launch:after 钩子的注入内容(在游戏加载后注入)
   try {
-    var afterInjects = collectPluginInjects('launch:after');
+    var afterInjects = collectPluginInjects('launch:after', { version: version, iframe: iframe });
     if (afterInjects.length > 0) {
       setTimeout(function(){
         try {

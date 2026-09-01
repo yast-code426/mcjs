@@ -93,14 +93,6 @@
         signature 算法: 'RSASSA-PKCS1-v1_5' + SHA-256
         适合公开发布,需要公钥
   */
-  function _sha256Hex(text) {
-    // 同步 SHA-256 (使用 crypto.subtle + 异步转同步通过预计算缓存)
-    // 为简单起见,这里返回 hex 字符串 — 由调用方用 SubtleCrypto 异步获取
-    // 实际校验逻辑走 _verifySha256Async
-    if (!_sha256Hex._cache) _sha256Hex._cache = {};
-    return _sha256Hex._cache[text] || null;
-  }
-
   function _stringifyForHash(plugin) {
     // 移除 signature 字段,规范化 JSON
     var p = Object.assign({}, plugin);
@@ -254,12 +246,10 @@
           remoteId: remoteId,
           remoteTrust: (getRemoteById(remoteId) || {}).trust || 'untrusted',
           signatureVerified: v.ok,
-          installedAt: Date.now(),
-          enabled: true
+          installedAt: Date.now()
         });
-        // 安装(覆盖本地副本)
+        // 安装(覆盖本地副本),不自动启用
         install(plugin);
-        enable(plugin.id);
         return plugin;
       });
     });
@@ -328,7 +318,7 @@
 
   /* ===== Built-in / Official Plugins =====
      这些插件"内置"在启动器中,默认全部禁用,需要用户从插件市场手动启用
-     这就是 v3.0 的核心改动:所有注入选项(包括原 WASM polyfill)都通过插件启用 */
+     这就是 v1.2 的核心改动:所有注入选项(包括原 WASM polyfill)都通过插件启用 */
 
   function builtinWasmPolyfill() {
     return {
@@ -693,33 +683,6 @@
     };
   }
 
-  function builtinAutoBackup() {
-    return {
-      inject: function() {
-        return {
-          type: 'js',
-          content: [
-            '(function(){',
-            '  if (window.__MCJS_AUTO_BACKUP__) return;',
-            '  window.__MCJS_AUTO_BACKUP__ = true;',
-            '  console.log("[MCJS-AutoBackup] Setting up periodic IndexedDB backup...");',
-            '  setInterval(function(){',
-            '    try {',
-            '      if (window.indexedDB && window.indexedDB.databases) {',
-            '        window.indexedDB.databases().then(function(dbs){',
-            '          console.log("[MCJS-AutoBackup] DB count:", dbs.length, "ts:", Date.now());',
-            '        });',
-            '      }',
-            '    } catch(e) {}',
-            '  }, 180000);',
-            '  console.log("[MCJS-AutoBackup] Loaded. Heartbeat every 3 min.");',
-            '})();'
-          ].join('\n')
-        };
-      }
-    };
-  }
-
   function builtinDarkModeForGame() {
     return {
       inject: function() {
@@ -730,25 +693,6 @@
             'html, body { background: #1a1d26 !important; }',
             '#loadingScreen, .loading-screen, .splash { background: #1a1d26 !important; }',
             '.button, button { background: rgba(255,255,255,0.06) !important; }'
-          ].join('\n')
-        };
-      }
-    };
-  }
-
-  function builtinEnglishLanguagePack() {
-    return {
-      inject: function() {
-        return {
-          type: 'js',
-          content: [
-            '(function(){',
-            '  if (window.__MCJS_EN_US__) return;',
-            '  window.__MCJS_EN_US__ = true;',
-            '  console.log("[MCJS-EnUS] English US language pack loaded (default fallback).");',
-            '  window.MCJS_I18N = window.MCJS_I18N || {};',
-            '  window.MCJS_I18N.en = { lang: "English (US)", author: "MCJS" };',
-            '})();'
           ].join('\n')
         };
       }
@@ -835,24 +779,6 @@
             '    } catch(_) {}',
             '  });',
             '  console.log("[MCJS-ErrReporter] Loaded. Use window.__MCJS_ERRORS__ to inspect.");',
-            '})();'
-          ].join('\n')
-        };
-      }
-    };
-  }
-
-  function builtinConsoleBeautifier() {
-    return {
-      inject: function() {
-        return {
-          type: 'js',
-          content: [
-            '(function(){',
-            '  if (window.__MCJS_CONSOLE_BEAUTIFIER__) return;',
-            '  window.__MCJS_CONSOLE_BEAUTIFIER__ = true;',
-            '  console.log("[MCJS-Console] %cMCJS Plugin %cv3.0", "color:#22c55e;font-weight:bold;font-size:14px", "color:#7c818f;font-size:11px");',
-            '  console.log("%cTip: 在控制台输入 %cwindow.MCJS_REGISTRY.list()%c 可查看所有已安装插件", "color:#7c818f", "color:#22c55e;font-family:monospace", "color:#7c818f");',
             '})();'
           ].join('\n')
         };
@@ -1060,22 +986,6 @@
       downloads: 5621
     },
     {
-      id: 'mcjs.auto-backup',
-      name: '自动备份',
-      version: '1.0.0',
-      author: 'MCJS 官方',
-      category: 'utility',
-      description: '每 3 分钟检测一次 IndexedDB,记录存档状态到控制台(方便调试)。',
-      longDescription: '在控制台持续输出存档数据库的状态,方便排查存档丢失问题。生产环境可作为存档监控使用。',
-      official: true,
-      source: 'official',
-      builtin: builtinAutoBackup,
-      permissions: ['system.info'],
-      hooks: ['launch:after'],
-      icon: 'BK',
-      downloads: 3142
-    },
-    {
       id: 'mcjs.game-darkmode',
       name: '游戏内深色',
       version: '1.0.0',
@@ -1090,22 +1000,6 @@
       hooks: ['launch:html'],
       icon: 'DK',
       downloads: 4187
-    },
-    {
-      id: 'mcjs.en-us',
-      name: 'English (US) Pack',
-      version: '1.0.0',
-      author: 'MCJS Official',
-      category: 'language',
-      description: 'English (United States) language marker for i18n compatibility.',
-      longDescription: 'Provides English (US) locale metadata and serves as fallback language pack for compatibility with English-only game versions.',
-      official: true,
-      source: 'official',
-      builtin: builtinEnglishLanguagePack,
-      permissions: ['system.info'],
-      hooks: ['launch:after'],
-      icon: 'EN',
-      downloads: 1923
     },
     {
       id: 'mcjs.save-export',
@@ -1154,22 +1048,6 @@
       hooks: ['launch:after'],
       icon: 'ER',
       downloads: 2891
-    },
-    {
-      id: 'mcjs.console-beautifier',
-      name: '控制台美化',
-      version: '1.0.0',
-      author: 'MCJS 官方',
-      category: 'appearance',
-      description: '为浏览器控制台添加带颜色的 MCJS 横幅,展示版本号和提示。',
-      longDescription: '纯装饰性插件,在 console 顶部显示 MCJS 标志和"查看已安装插件"的提示。',
-      official: true,
-      source: 'official',
-      builtin: builtinConsoleBeautifier,
-      permissions: [],
-      hooks: ['launch:after'],
-      icon: 'CL',
-      downloads: 1645
     },
     {
       id: 'mcjs.net-logger',
@@ -1326,30 +1204,16 @@
     try {
       var inst = plugin.builtin();
       _activePlugins[plugin.id] = inst;
-      // 暴露实例到全局,供 game.js 收集 inject
       window.__MCJS_PLUGIN_INSTANCES__ = window.__MCJS_PLUGIN_INSTANCES__ || {};
       window.__MCJS_PLUGIN_INSTANCES__[plugin.id] = inst;
-      // 注册钩子
-      if (plugin.hooks && inst && inst.inject) {
+      if (plugin.hooks && inst && typeof inst.inject === 'function') {
         plugin.hooks.forEach(function(hookName) {
           API._internal.registerHook(hookName, plugin.id, function(args) {
-            var result;
-            try { result = inst.inject({ hook: hookName, args: args }); }
-            catch (e) { console.warn('[MCJS] Plugin inject error in', plugin.id, hookName, e); }
-            if (result && result.content) {
-              // 把要注入的脚本/CSS 暂存,由 launch 流程读取
-              window.__MCJS_PENDING_INJECTS__ = window.__MCJS_PENDING_INJECTS__ || [];
-              window.__MCJS_PENDING_INJECTS__.push({
-                pluginId: plugin.id,
-                type: result.type || 'js',
-                content: result.content
-              });
-            }
             return args;
           }, 50);
         });
       }
-      console.log('[MCJS] Plugin activated:', plugin.id);
+      console.log('[MCJS] Plugin activated:', plugin.id, '(hooks:', (plugin.hooks || []).join(', ') + ')');
     } catch (e) {
       console.error('[MCJS] Plugin activation error:', plugin.id, e);
     }
@@ -1361,29 +1225,9 @@
     if (window.__MCJS_PLUGIN_INSTANCES__) delete window.__MCJS_PLUGIN_INSTANCES__[id];
   }
 
-  /* Collect pending injects and clear */
+  /* Collect pending injects (legacy compat — returns empty, injects are now collected directly) */
   function consumeInjects() {
-    var items = window.__MCJS_PENDING_INJECTS__ || [];
-    window.__MCJS_PENDING_INJECTS__ = [];
-    return items;
-  }
-
-  function consumeInjectsFor(hookName) {
-    var items = window.__MCJS_PENDING_INJECTS_BY_HOOK__ || {};
-    var out = items[hookName] || [];
-    items[hookName] = [];
-    window.__MCJS_PENDING_INJECTS_BY_HOOK__ = items;
-    return out;
-  }
-
-  /* Better: collect per hook */
-  function runHookCollect(hookName, args) {
-    // Reset collects
-    var all = window.__MCJS_PENDING_INJECTS__ || [];
-    all = [];
-    window.__MCJS_PENDING_INJECTS__ = all;
-    API._internal.runHook(hookName, args);
-    return all;
+    return [];
   }
 
   /* ===== Boot: enable previously-enabled plugins ===== */
@@ -1403,13 +1247,6 @@
     });
   }
 
-  function installOfficial(id) {
-    var p = OFFICIAL_PLUGINS.find(function(x) { return x.id === id; });
-    if (!p) return false;
-    _enabledPlugins[id] = _enabledPlugins[id] || false;
-    return true;
-  }
-
   window.MCJS_REGISTRY = {
     /* list / query */
     list: list,
@@ -1426,7 +1263,6 @@
     bootEnabled: bootEnabled,
     /* injects */
     consumeInjects: consumeInjects,
-    runHookCollect: runHookCollect,
     /* remotes */
     remotes: {
       list: getRemotes,
@@ -1453,11 +1289,4 @@
     /* internals */
     _activePlugins: function() { return Object.keys(_activePlugins); }
   };
-
-  // Auto-boot
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bootEnabled);
-  } else {
-    setTimeout(bootEnabled, 0);
-  }
 })();

@@ -10,28 +10,61 @@
 
   /* ===== Hook System ===== */
   var _hooks = {}; // hookName -> [{pluginId, fn, priority}]
+  var _validHookPoints = {};
+  window.MCJS_HOOK_POINTS.forEach(function(hp) { _validHookPoints[hp.name] = true; });
 
   function registerHook(name, pluginId, fn, priority) {
+    if (typeof name !== 'string' || !name) { console.warn('[MCJS] registerHook: invalid hook name'); return; }
+    if (typeof pluginId !== 'string' || !pluginId) { console.warn('[MCJS] registerHook: invalid pluginId'); return; }
+    if (typeof fn !== 'function') { console.warn('[MCJS] registerHook: fn is not a function for', name, pluginId); return; }
+    if (_validHookPoints[name] === undefined) { console.warn('[MCJS] registerHook: unknown hook point "' + name + '" for plugin ' + pluginId + ' — will still register but may never fire'); }
     if (!_hooks[name]) _hooks[name] = [];
-    _hooks[name].push({ pluginId: pluginId, fn: fn, priority: priority || 100 });
+    var existing = _hooks[name].find(function(h) { return h.pluginId === pluginId; });
+    if (existing) {
+      existing.fn = fn;
+      existing.priority = (priority !== undefined ? priority : 100);
+    } else {
+      _hooks[name].push({ pluginId: pluginId, fn: fn, priority: (priority !== undefined ? priority : 100) });
+    }
     _hooks[name].sort(function(a, b) { return a.priority - b.priority; });
   }
 
   function unregisterPluginHooks(pluginId) {
     Object.keys(_hooks).forEach(function(name) {
       _hooks[name] = (_hooks[name] || []).filter(function(h) { return h.pluginId !== pluginId; });
+      if (_hooks[name].length === 0) delete _hooks[name];
     });
+  }
+
+  function hasHook(name) {
+    var list = _hooks[name];
+    return !!(list && list.length > 0);
+  }
+
+  function listHooks() {
+    var result = {};
+    Object.keys(_hooks).forEach(function(name) {
+      result[name] = _hooks[name].map(function(h) { return h.pluginId; });
+    });
+    return result;
   }
 
   /* Run a hook with synchronous result collection */
   function runHook(name, args, ctx) {
     var list = _hooks[name];
     if (!list || list.length === 0) return args;
+    var snapshot = list.slice();
     var current = args;
-    for (var i = 0; i < list.length; i++) {
+    var origType = typeof current;
+    for (var i = 0; i < snapshot.length; i++) {
       try {
-        var result = list[i].fn.call(ctx || null, current);
-        if (result !== undefined) current = result;
+        var result = snapshot[i].fn.call(ctx || null, current);
+        if (result !== undefined && result !== null) {
+          if (typeof result !== origType && origType !== 'undefined') {
+            console.warn('[MCJS] Hook "' + name + '" handler from "' + snapshot[i].pluginId + '" changed return type from ' + origType + ' to ' + typeof result);
+          }
+          current = result;
+        }
       } catch (e) {
         console.error('[MCJS Plugin] Hook error in', name, ':', e);
       }
@@ -43,10 +76,12 @@
   function runHookAll(name, args, ctx) {
     var list = _hooks[name];
     if (!list || list.length === 0) return [];
+    var snapshot = list.slice();
     var results = [];
-    for (var i = 0; i < list.length; i++) {
+    for (var i = 0; i < snapshot.length; i++) {
       try {
-        results.push(list[i].fn.call(ctx || null, args));
+        var r = snapshot[i].fn.call(ctx || null, args);
+        if (r !== undefined) results.push(r);
       } catch (e) {
         console.error('[MCJS Plugin] Hook error in', name, ':', e);
       }
@@ -123,10 +158,6 @@
     /* Hooks */
     on: on,
     emit: emit,
-    addHook: function(name, fn, priority) {
-      // 兼容 - 由 registry 内部包装
-      console.warn('[MCJS Plugin API] addHook should be called via plugin context, use registerHook instead');
-    },
 
     /* Settings */
     getSetting: getPluginSetting,
@@ -196,8 +227,14 @@
       addPanel: function(title, content) {
         var panel = document.createElement('div');
         panel.className = 'plugin-panel';
-        panel.innerHTML = '<div class="plugin-panel-header">' + (title || '') + '</div>' +
-                          '<div class="plugin-panel-body">' + (content || '') + '</div>';
+        var header = document.createElement('div');
+        header.className = 'plugin-panel-header';
+        header.textContent = title || '';
+        var body = document.createElement('div');
+        body.className = 'plugin-panel-body';
+        body.textContent = content || '';
+        panel.appendChild(header);
+        panel.appendChild(body);
         return panel;
       }
     },
@@ -321,6 +358,8 @@
     _internal: {
       registerHook: registerHook,
       unregisterHooks: unregisterPluginHooks,
+      hasHook: hasHook,
+      listHooks: listHooks,
       runHook: runHook,
       runHookAll: runHookAll,
       log: log,

@@ -1,5 +1,5 @@
 /* MCJS Launcher - Service Worker */
-const CACHE_VERSION = 'mcjs-sw-v2-r3';
+const CACHE_VERSION = 'mcjs-sw-v2-r4';
 const GAME_CACHE_PREFIX = 'mcjs-game-';
 const DEFAULT_CACHE_LIMIT = 500; // 默认缓存条目数量限制
 var cacheSizeLimit = DEFAULT_CACHE_LIMIT;
@@ -35,7 +35,7 @@ self.addEventListener('activate', function(event) {
     caches.keys().then(function(cacheNames) {
       return Promise.all(
         cacheNames
-          .filter(function(name) { return name.startsWith(GAME_CACHE_PREFIX) && name !== CACHE_VERSION; })
+          .filter(function(name) { return (name.startsWith(GAME_CACHE_PREFIX) || name.startsWith('mcjs-sw-')) && name !== CACHE_VERSION; })
           .map(function(name) { return caches.delete(name); })
       );
     }).then(function() {
@@ -75,9 +75,9 @@ self.addEventListener('fetch', function(event) {
     caches.open(CACHE_VERSION).then(function(cache) {
       return cache.match(event.request).then(function(cachedResponse) {
         if (cachedResponse) {
-          // For HTML requests, inject polyfills
-          if (event.request.mode === 'navigate' || 
-              event.request.headers.get('accept')?.indexOf('text/html') !== -1) {
+            // For HTML requests, inject polyfills
+            var acceptHeader = event.request.headers.get('accept') || '';
+            if (event.request.mode === 'navigate' || acceptHeader.indexOf('text/html') !== -1) {
             return cachedResponse.text().then(function(html) {
               var injected = injectPolyfills(html);
               return new Response(injected, {
@@ -105,8 +105,8 @@ self.addEventListener('fetch', function(event) {
             });
 
             // For HTML responses, inject polyfills
-            if (event.request.mode === 'navigate' || 
-                event.request.headers.get('accept')?.indexOf('text/html') !== -1) {
+            var acceptHeader2 = event.request.headers.get('accept') || '';
+            if (event.request.mode === 'navigate' || acceptHeader2.indexOf('text/html') !== -1) {
               return networkResponse.text().then(function(html) {
                 var injected = injectPolyfills(html);
                 return new Response(injected, {
@@ -178,7 +178,9 @@ self.addEventListener('message', function(event) {
     );
   }
   if (event.data && event.data.type === 'SET_CACHE_LIMIT') {
-    cacheSizeLimit = event.data.limit || DEFAULT_CACHE_LIMIT;
+    var limit = Number(event.data.limit);
+    if (!Number.isFinite(limit) || limit < 10 || limit > 10000) limit = DEFAULT_CACHE_LIMIT;
+    cacheSizeLimit = limit;
     console.log('[SW] Cache limit set to:', cacheSizeLimit);
     event.waitUntil(
       caches.open(CACHE_VERSION).then(function(cache) {

@@ -264,7 +264,8 @@ var BADGE_MAP = {
   'recommended': { cls: 'badge-recommended', text: '推荐' },
   'beta': { cls: 'badge-beta', text: '测试版' },
   'legacy': { cls: 'badge-legacy', text: '经典版' },
-  'new-beta': { cls: 'badge-new', text: '新版测试' }
+  'new-beta': { cls: 'badge-new', text: '新版测试' },
+  'third-party': { cls: 'badge-third-party', text: '第三方' }
 };
 
 function renderHighlightedDetail(detailText) {
@@ -283,16 +284,23 @@ function renderHighlightedDetail(detailText) {
       var rendered = escaped;
       
       try {
+        rendered = rendered.replace(/(单机)(\s*)(✓)/g, '<span class="detail-feature detail-feature-single">单机</span> <span class="detail-icon detail-icon-ok">✓</span>');
+        rendered = rendered.replace(/(单机)(\s*)(✗)/g, '<span class="detail-feature detail-feature-single">单机</span> <span class="detail-icon detail-icon-fail">✗</span>');
+        rendered = rendered.replace(/(局域网)(\s*)(✓)/g, '<span class="detail-feature detail-feature-lan">局域网</span> <span class="detail-icon detail-icon-ok">✓</span>');
+        rendered = rendered.replace(/(局域网)(\s*)(✗)/g, '<span class="detail-feature detail-feature-lan">局域网</span> <span class="detail-icon detail-icon-fail">✗</span>');
+        rendered = rendered.replace(/(远程联机)(\s*)(✓)/g, '<span class="detail-feature detail-feature-online">远程联机</span> <span class="detail-icon detail-icon-ok">✓</span>');
+        rendered = rendered.replace(/(远程联机)(\s*)(✗)/g, '<span class="detail-feature detail-feature-online">远程联机</span> <span class="detail-icon detail-icon-fail">✗</span>');
+
         rendered = rendered.replace(/✓/g, '<span class="detail-icon detail-icon-ok">✓</span>');
         rendered = rendered.replace(/✗/g, '<span class="detail-icon detail-icon-fail">✗</span>');
-        
+
         rendered = rendered.replace(/(性能：)(高)/g, '$1<span class="detail-perf detail-perf-high">$2</span>');
         rendered = rendered.replace(/(性能：)(极高)/g, '$1<span class="detail-perf detail-perf-extreme">$2</span>');
         rendered = rendered.replace(/(性能：)(中)/g, '$1<span class="detail-perf detail-perf-medium">$2</span>');
         rendered = rendered.replace(/(性能：)(较低)/g, '$1<span class="detail-perf detail-perf-low">$2</span>');
         rendered = rendered.replace(/(性能：)(低)/g, '$1<span class="detail-perf detail-perf-low">$2</span>');
         rendered = rendered.replace(/(性能：)(极低)/g, '$1<span class="detail-perf detail-perf-verylow">$2</span>');
-        
+
         rendered = rendered.replace(/(语言：)(简体中文、英文)/g, '$1<span class="detail-lang detail-lang-zh">$2</span>');
         rendered = rendered.replace(/(语言：)(简体中文)/g, '$1<span class="detail-lang detail-lang-zh">$2</span>');
         rendered = rendered.replace(/(语言：)(仅英文原版)/g, '$1<span class="detail-lang detail-lang-en">$2</span>');
@@ -303,14 +311,7 @@ function renderHighlightedDetail(detailText) {
         rendered = rendered.replace(/(设备：)(.*?)(触屏操作)(.*)/g, '$1$2<span class="detail-device detail-device-touch">触屏操作</span>$4');
         rendered = rendered.replace(/(设备：)(仅支持电脑键鼠操作)/g, '$1<span class="detail-device detail-device-pc">$2</span>');
         rendered = rendered.replace(/(设备：)(电脑键鼠操作)/g, '$1<span class="detail-device detail-device-pc">$2</span>');
-        
-        rendered = rendered.replace(/(单机)(\s*)(✓)/g, '<span class="detail-feature detail-feature-single">单机</span> <span class="detail-icon detail-icon-ok">✓</span>');
-        rendered = rendered.replace(/(单机)(\s*)(✗)/g, '<span class="detail-feature detail-feature-single">单机</span> <span class="detail-icon detail-icon-fail">✗</span>');
-        rendered = rendered.replace(/(局域网)(\s*)(✓)/g, '<span class="detail-feature detail-feature-lan">局域网</span> <span class="detail-icon detail-icon-ok">✓</span>');
-        rendered = rendered.replace(/(局域网)(\s*)(✗)/g, '<span class="detail-feature detail-feature-lan">局域网</span> <span class="detail-icon detail-icon-fail">✗</span>');
-        rendered = rendered.replace(/(远程联机)(\s*)(✓)/g, '<span class="detail-feature detail-feature-online">远程联机</span> <span class="detail-icon detail-icon-ok">✓</span>');
-        rendered = rendered.replace(/(远程联机)(\s*)(✗)/g, '<span class="detail-feature detail-feature-online">远程联机</span> <span class="detail-icon detail-icon-fail">✗</span>');
-        
+
         rendered = rendered.replace(/自定义材质包/g, '<span class="detail-resource detail-resource-texture">自定义材质包</span>');
         rendered = rendered.replace(/内置光影包/g, '<span class="detail-resource detail-resource-shader">内置光影包</span>');
         rendered = rendered.replace(/内置模组包/g, '<span class="detail-resource detail-resource-mod">内置模组包</span>');
@@ -335,6 +336,9 @@ function renderHighlightedDetail(detailText) {
         }
         if (rendered.indexOf('新版测试') !== -1) {
           rendered = rendered.replace(/新版测试/g, '<span class="detail-badge-new">新版测试</span>');
+        }
+        if (rendered.indexOf('定制主题') !== -1) {
+          rendered = rendered.replace(/(定制主题)/g, '<span class="detail-resource-mod">$1</span>');
         }
       } catch(lineErr) {
         console.warn('[MCJS] Line render failed, using escaped text:', lineErr.message);
@@ -396,8 +400,14 @@ var GROUPS = [
   {
     id: 'newbeta',
     title: '最新测试版 Eaglercraft 客户端',
-    desc: '提前体验最新版本。测试版稳定性不足，仅用于体验。高版本对设备性能要求较高，仅 WASM 版本可用。注意：这些版本仅支持英文。',
+    desc: '提前体验最新版本 (1.13+ 高版本)。测试版不稳定且 bug 多，仅测试体验。高版本对设备性能要求高，仅有 WASM 版，需高性能电脑。部分版本已有中文翻译。',
     typeMatch: function(ver){ return !ver.modpack && (ver.type === 'beta' || ver.type === 'new-beta'); }
+  },
+  {
+    id: 'third-party',
+    title: '第三方 Eaglercraft 客户端',
+    desc: '由社区开发的第三方客户端，魔改界面和功能，非官方不受支持。',
+    typeMatch: function(ver){ return ver.type === 'third-party'; }
   },
   {
     id: 'legacy',
@@ -569,17 +579,19 @@ function renderMirrorSelection(ver){
   document.getElementById('autoLaunchBtn').addEventListener('keydown', function(e){
     if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); startGameLaunch(ver); }
   });
-  document.getElementById('modalClose').addEventListener('click', function(){
-  if(sound) sound.close();
-  launchModal.classList.remove('active');
-});
-
-launchModal.addEventListener('click', function(e){
-  if(e.target === launchModal){
-    if(sound) sound.close();
-    launchModal.classList.remove('active');
+  if (!renderMirrorSelection._modalBound) {
+    renderMirrorSelection._modalBound = true;
+    document.getElementById('modalClose').addEventListener('click', function(){
+      if(sound) sound.close();
+      launchModal.classList.remove('active');
+    });
+    launchModal.addEventListener('click', function(e){
+      if(e.target === launchModal){
+        if(sound) sound.close();
+        launchModal.classList.remove('active');
+      }
+    });
   }
-});
   container.querySelectorAll('.mirror-item').forEach(function(el){
     el.addEventListener('click', function(){
       if(sound) sound.click();
@@ -1608,6 +1620,58 @@ function initFAQAccordion(){
   }
 }
 
+/* ========== 更新公告弹窗 ========== */
+function showAnnouncement() {
+  var ANNOUNCE_KEY = 'mcjs_announce_v1.2';
+  var ANNOUNCE_TODAY_KEY = 'mcjs_announce_today';
+  var READ_TIME = 3;
+
+  try {
+    var forever = localStorage.getItem(ANNOUNCE_KEY);
+    if (forever === 'closed') return;
+    var today = localStorage.getItem(ANNOUNCE_TODAY_KEY);
+    var todayStr = new Date().toDateString();
+    if (today === todayStr) return;
+  } catch (e) { return; }
+
+  var modal = document.getElementById('announceModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  var timerEl = document.getElementById('announceTimer');
+  var btnToday = document.getElementById('announceCloseToday');
+  var btnForever = document.getElementById('announceCloseForever');
+  if (!timerEl || !btnToday || !btnForever) return;
+
+  var countdown = READ_TIME;
+  timerEl.textContent = '请阅读 ' + countdown + ' 秒后可关闭…';
+
+  var interval = setInterval(function() {
+    countdown--;
+    if (countdown > 0) {
+      timerEl.textContent = '请阅读 ' + countdown + ' 秒后可关闭…';
+    } else {
+      clearInterval(interval);
+      timerEl.textContent = '可以关闭了';
+      timerEl.classList.add('ready');
+      btnToday.disabled = false;
+      btnForever.disabled = false;
+    }
+  }, 1000);
+
+  btnToday.addEventListener('click', function() {
+    if (btnToday.disabled) return;
+    try { localStorage.setItem(ANNOUNCE_TODAY_KEY, new Date().toDateString()); } catch (e) {}
+    modal.style.display = 'none';
+  });
+
+  btnForever.addEventListener('click', function() {
+    if (btnForever.disabled) return;
+    try { localStorage.setItem(ANNOUNCE_KEY, 'closed'); } catch (e) {}
+    modal.style.display = 'none';
+  });
+}
+
 /* ========== 初始化 ========== */
 function safeRun(fn, label){
   try { fn(); }
@@ -1639,6 +1703,7 @@ function safeRun(fn, label){
     safeRun(function(){ attachHoverSound(document); }, 'attachHoverSound');
     safeRun(initFAQAccordion, 'initFAQAccordion');
     safeRun(updateSearchClearBtn, 'updateSearchClearBtn');
+    safeRun(showAnnouncement, 'showAnnouncement');
     
     requestAnimationFrame(function(){
       try {
@@ -1732,10 +1797,6 @@ function showToast(msg, type) {
     t.classList.remove('show');
     setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 350);
   }, 3500);
-}
-function escapeHtml2(s) {
-  if (s === null || s === undefined) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 window.MCJS_TOAST = showToast;
 window.MCJS_ESCAPE_HTML = escapeHtml2;
@@ -2008,7 +2069,7 @@ function buildPluginDocsHTML() {
 
     '<section class="plugin-doc-section">',
     '<h3>远程加载 / 第三方市场</h3>',
-    '<p>MCJS v3.0 开放了插件加载链路,支持以下方式从远程安装插件:</p>',
+    '<p>MCJS v1.2 开放了插件加载链路,支持以下方式从远程安装插件:</p>',
     '<ol>',
     '<li><strong>添加第三方仓库</strong>:在远程仓库标签点击 "添加仓库",填入任何符合协议的 JSON manifest 地址。</li>',
     '<li><strong>URL 直接导入</strong>:在 "浏览" 标签底部粘贴 URL(GitHub raw、CDN、个人服务器),选择要安装的插件即可。</li>',

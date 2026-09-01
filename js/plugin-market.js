@@ -240,7 +240,7 @@
         listEl.innerHTML =
           '<div class="empty-state">' +
           '<p>所有插件均为最新版本</p>' +
-          '<p style="margin-top:8px;font-size:0.85rem;">启动器 v3.0 · 插件市场版本 1.0</p>' +
+          '<p style="margin-top:8px;font-size:0.85rem;">启动器 v1.2 · 插件市场版本 1.0</p>' +
           '</div>';
         if (window.MCJS_TOAST) window.MCJS_TOAST('所有插件已是最新', 'success');
         return;
@@ -609,8 +609,7 @@
           }
           // 如果 builtin 字段存在,提示用户
           Registry.install(plugin);
-          Registry.enable(plugin.id);
-          if (window.MCJS_TOAST) window.MCJS_TOAST('插件已导入并启用: ' + plugin.name, 'success');
+          if (window.MCJS_TOAST) window.MCJS_TOAST('插件已导入,请手动启用: ' + plugin.name, 'success');
           renderAll();
         } catch (err) {
           if (window.MCJS_TOAST) window.MCJS_TOAST('导入失败: ' + err.message, 'error');

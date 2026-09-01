@@ -1,14 +1,46 @@
 // MCJS 镜像站 - 版本数据
 // 所有 Eaglercraft/MCJS 版本及镜像链接
+// 数据来源: https://mcjs.link/
 
-// 同时挂到 window 和模块作用域,避免 IIFE/作用域差异导致引用失败
+const MIRROR_BASES = [
+  'https://play.mcjs.cc',
+  'https://playmcjscc.pages.dev',
+  'https://play.mcjs.144449.xyz',
+  'https://ipv6.mcjs.cc',
+  'https://mirror.mcjs.cc',
+  'https://mcjs-mirror.144449.xyz',
+  'https://mcjs-mirror-test.144449.xyz',
+  'https://1.mcjslink.144449.xyz',
+  'https://2.mcjslink.144449.xyz',
+  'https://3.mcjslink.144449.xyz',
+  'https://4.mcjslink.144449.xyz',
+  'https://5.mcjslink.144449.xyz',
+  'https://6.mcjslink.144449.xyz',
+  'https://7.mcjslink.144449.xyz'
+];
+
+const BETA_MIRROR_BASE = 'https://mcjs-beta.144449.xyz';
+
+function makeMirrors(path) {
+  return MIRROR_BASES.map(function(base, i) {
+    return { name: '镜像站 ' + (i + 1), url: base + '/' + path + '/' };
+  });
+}
+
+function makeBetaMirrors(path, originUrl) {
+  var mirrors = [{ name: '加速镜像', url: BETA_MIRROR_BASE + '/' + path }];
+  if (originUrl) mirrors.push({ name: '原站', url: originUrl });
+  return mirrors;
+}
+
 const VERSIONS = [
   // === MCJS 优化版（推荐） ===
   {
     id: '1.8.8',
     name: 'EaglercraftX 1.8.8',
-    version: 'MC JE 1.8.8 JS u53',
+    version: 'MC JE 1.8.8 JS u53 ultimate',
     author: 'lax1dude',
+    translator: 'MCJS',
     type: 'recommended',
     engine: 'JS',
     size: '21.1MB',
@@ -18,26 +50,21 @@ const VERSIONS = [
     modpack: false,
     description: '兼容性最佳。支持 PC + 手机，局域网 & P2P 联机，光影效果。',
     recommendTag: '最佳兼容',
-    detail: '语言：简体中文、英文\n' +
+    detail: '已更新最终版汉化包，更新完整翻译\n' +
+            '语言：简体中文(完整翻译)、英文\n' +
             '性能：高\n' +
             '设备：电脑键鼠操作、手机触屏操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '资源：自定义材质包、内置光影包',
     path: '1.8.8',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.8.8/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.8.8/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.8.8/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.8.8/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.8.8/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.8.8/' }
-    ]
+    mirrors: makeMirrors('1.8.8')
   },
   {
     id: '1.8.8wasm',
     name: 'EaglercraftX 1.8.8 WASM',
-    version: 'MC JE 1.8.8 WASM-GC u53',
+    version: 'MC JE 1.8.8 WASM-GC u53 ultimate',
     author: 'lax1dude',
+    translator: 'MCJS',
     type: 'recommended',
     engine: 'WASM',
     size: '9.6MB',
@@ -47,112 +74,94 @@ const VERSIONS = [
     modpack: false,
     description: '性能最佳。WASM 增强，更高 FPS。需要现代 Chrome 浏览器。',
     recommendTag: '最佳性能',
-    detail: '语言：简体中文、英文\n' +
+    detail: '已更新最终版汉化包，更新完整翻译\n' +
+            '语言：简体中文(完整翻译)、英文\n' +
             '性能：极高\n' +
             '设备：电脑键鼠操作、手机触屏操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '资源：自定义材质包、内置光影包',
     path: '1.8.8wasm',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.8.8wasm/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.8.8wasm/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.8.8wasm/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.8.8wasm/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.8.8wasm/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.8.8wasm/' }
-    ]
+    mirrors: makeMirrors('1.8.8wasm')
   },
   {
     id: '1.12.2',
     name: 'Eaglercraft 1.12.2',
-    version: 'MC JE 1.12.2 JS u2',
+    version: 'MC JE 1.12.2 JS u3',
     author: 'PeytonPlayz585',
-    type: 'beta',
+    translator: 'MCJS',
+    type: 'recommended',
     engine: 'JS',
     size: '27.7MB',
-    lang: ['简体中文', 'English'],
-    features: ['单机'],
-    multiplayer: false,
-    modpack: false,
-    description: '最新稳定客户端版本。支持中文。暂不支持多人联机或光影。',
-    detail:'语言：简体中文、英文\n' +
-            '性能：中\n' +
-            '设备：仅支持电脑键鼠操作\n' +
-            '联机：单机 ✓ 局域网 ✗ 远程联机 ✗\n' +
-            '资源：自定义材质包',
-    path: '1.12.2',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.12.2/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.12.2/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.12.2/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.12.2/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.12.2/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.12.2/' }
-    ]
-  },
-  {
-    id: '1.12.2wasm',
-    name: 'Eaglercraft 1.12.2 WASM',
-    version: 'MC JE 1.12.2 WASM-GC u2',
-    author: 'PeytonPlayz585',
-    type: 'beta',
-    engine: 'WASM',
-    size: '15.9MB',
-    lang: ['简体中文', 'English'],
-    features: ['单机'],
-    multiplayer: false,
-    modpack: false,
-    description: '1.12.2 的 WASM 版本。性能更好，仍在测试中。',
-    detail:'语言：简体中文、英文\n' +
-            '性能：较高\n' +
-            '设备：仅支持电脑键鼠操作\n' +
-            '联机：单机 ✓ 局域网 ✗ 远程联机 ✗\n' +
-            '资源：自定义材质包',
-    path: '1.12.2wasm',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.12.2wasm/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.12.2wasm/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.12.2wasm/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.12.2wasm/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.12.2wasm/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.12.2wasm/' }
-    ]
-  },
-  {
-    id: '1.12.2u3wasm',
-    name: 'Eaglercraft 1.12.2 WASM u3',
-    version: 'MC JE 1.12.2 WASM-GC u3',
-    author: 'PeytonPlayz585',
-    type: 'beta',
-    engine: 'WASM',
-    size: '17.9MB',
-    lang: ['English'],
+    lang: ['简体中文(完整翻译)'],
     features: ['远程联机', '局域网', '导出存档'],
     multiplayer: true,
     modpack: false,
-    description: 'u3：新增存档导出和远程多人联机。切换语言会导致游戏崩溃（仅限英文）。',
-    detail:'与 1.12.2 u2 版的区别：此 u3 版新增了导出世界和远程联机支持，修复了部分渲染问题，但是有新 bug：切换语言会导致游戏崩溃，故只有英文版\n' +
-            '语言：仅英文原版\n' +
+    description: '已热更新至 u3 版本，大幅提升性能。支持导出存档和局域网/远程联机。',
+    detail: '已热更新至 u3 版本，大幅提升性能\n' +
+            '现已支持导出存档和局域网/远程联机\n' +
+            '已更新最终版汉化包，更新完整翻译\n' +
+            '语言：简体中文(完整翻译)\n' +
             '性能：较高\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '资源：自定义材质包',
-    path: '1.12.2wasm-u3',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.12.2wasm-u3/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.12.2wasm-u3/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.12.2wasm-u3/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.12.2wasm-u3/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.12.2wasm-u3/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.12.2wasm-u3/' }
-    ]
+    path: '1.12.2',
+    mirrors: makeMirrors('1.12.2')
+  },
+  {
+    id: '1.12.2wasm',
+    name: 'Eaglercraft 1.12.2 WASM',
+    version: 'MC JE 1.12.2 WASM-GC u3',
+    author: 'PeytonPlayz585',
+    translator: 'MCJS',
+    type: 'recommended',
+    engine: 'WASM',
+    size: '17.9MB',
+    lang: ['简体中文(完整翻译)'],
+    features: ['远程联机', '局域网', '导出存档'],
+    multiplayer: true,
+    modpack: false,
+    description: '1.12.2 WASM u3 版本。性能更好，支持导出存档和联机。',
+    detail: '已热更新至 u3 版本，大幅提升性能\n' +
+            '现已支持导出存档和局域网/远程联机\n' +
+            '已更新最终版汉化包，更新完整翻译\n' +
+            '语言：简体中文(完整翻译)\n' +
+            '性能：高\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '资源：自定义材质包',
+    path: '1.12.2wasm',
+    mirrors: makeMirrors('1.12.2wasm')
   },
 
   // === 新版 Beta 版本 ===
   {
+    id: '1.14.4',
+    name: 'Eaglercraft 1.14.4 WASM',
+    version: 'MC JE 1.14.4 WASM-GC u1',
+    author: 'eymenwsmc',
+    translator: 'Enchantment-Niko',
+    type: 'new-beta',
+    engine: 'WASM',
+    size: '~45MB',
+    lang: ['简体中文', 'English'],
+    features: ['远程联机', '局域网'],
+    multiplayer: true,
+    modpack: false,
+    description: '1.14 版本移植。需要高性能电脑。测试版不稳定。',
+    detail: '语言：简体中文、英文\n' +
+            '性能：低(建议使用高性能的电脑)\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '资源：自定义材质包',
+    path: '1.14.4',
+    mirrors: makeBetaMirrors('1.14.4', 'https://enchantment-niko.github.io/webmc/1.14.4/'),
+    external: true
+  },
+  {
     id: '1.16.5',
     name: 'Eaglercraft 1.16.5 WASM',
-    version: 'MC JE 1.16.5 WASM-GC u2 beta',
+    version: 'MC JE 1.16.5 WASM-GC u3 beta',
     author: 'AcornDev',
     type: 'new-beta',
     engine: 'WASM',
@@ -161,16 +170,38 @@ const VERSIONS = [
     features: ['远程联机', '局域网'],
     multiplayer: true,
     modpack: false,
-    description: '下界更新移植版！非常早期的 Beta。需要高配电脑。仅限英文。',
-    detail:'语言：仅英文原版\n' +
-            '性能：低（建议使用高性能的电脑）\n' +
+    description: '下界更新移植版！已知 bug: 阴影渲染偏暗，建议调高亮度。',
+    detail: '⚠️已知 bug: 阴影渲染有问题导致整体亮度偏暗，建议调高亮度使用\n' +
+            '语言：仅英文原版\n' +
+            '性能：低(建议使用高性能的电脑)\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '资源：自定义材质包',
     path: '1.16.5',
-    mirrors: [
-      { name: 'Beta 站', url: 'https://mcjs-beta.144449.xyz/1.16.5' }
-    ],
+    mirrors: makeBetaMirrors('1.16.5', 'https://enchantment-niko.github.io/webmc/1.16.5/'),
+    external: true
+  },
+  {
+    id: '1.20.6',
+    name: 'Eaglercraft 1.20.6 WASM',
+    version: 'MC JE 1.20.6 WASM-GC beta 0.1',
+    author: 'eymenwsmc',
+    translator: 'Enchantment-Niko',
+    type: 'new-beta',
+    engine: 'WASM',
+    size: '~55MB',
+    lang: ['简体中文', 'English'],
+    features: ['远程联机', '局域网'],
+    multiplayer: true,
+    modpack: false,
+    description: '1.20 版本移植。非常早期的 beta，需要高性能电脑。',
+    detail: '语言：简体中文、英文\n' +
+            '性能：低(建议使用高性能的电脑)\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '资源：自定义材质包',
+    path: '1.20.6',
+    mirrors: makeBetaMirrors('1.20.6', 'https://enchantment-niko.github.io/webmc/1.20.6/chinese.html'),
     external: true
   },
   {
@@ -178,49 +209,68 @@ const VERSIONS = [
     name: 'Eaglercraft 1.21.11 WASM',
     version: 'MC JE 1.21.11 WASM-GC u1 beta',
     author: 'Syntaxsavy',
+    translator: 'Enchantment-Niko',
     type: 'new-beta',
     engine: 'WASM',
     size: '49.5MB',
-    lang: ['English'],
-    features: ['单机', '局域网'],
+    lang: ['简体中文', 'English'],
+    features: ['单机'],
     multiplayer: false,
     modpack: false,
-    description: '棘巧试炼更新。极度早期版本，可能导致浏览器崩溃。仅限英文。',
-    detail: '警告：性能极差，容易导致浏览器崩溃\n' +
-            '语言：仅英文原版\n' +
-            '性能：极低（建议使用高性能的电脑）\n' +
+    description: '棘巧试炼更新。极度早期版本，可能导致浏览器崩溃。需要导入自定义皮肤才能进入主页。',
+    detail: '⚠️已知 bug: 需要导入一个自定义皮肤才能进入主页\n' +
+            '语言：简体中文、英文\n' +
+            '性能：极低(建议使用高性能的电脑)\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✗\n' +
             '资源：自定义材质包',
     path: '1.21.11',
-    mirrors: [
-      { name: 'Beta 站', url: 'https://mcjs-beta.144449.xyz/1.21.11' }
-    ],
+    mirrors: makeBetaMirrors('1.21.11', 'https://enchantment-niko.github.io/webmc/1.21.11/desktop.html'),
     external: true
   },
   {
     id: '26.1.2',
-    name: 'Eaglercraft 26.1.2',
+    name: 'Eaglercraft 26.1.2 WebGL2',
     version: 'MC JE 26.1.2 u0-1.2',
     author: 'Novix',
     type: 'new-beta',
-    engine: 'WASM',
+    engine: 'WebGL2',
     size: '61.6MB',
     lang: ['English'],
-    features: ['单机', '局域网'],
+    features: ['单机'],
     multiplayer: false,
     modpack: false,
     description: '前沿版本。非常不稳定，可能崩溃。仅限英文。',
-    detail:'警告：性能极差，容易导致浏览器崩溃\n' +
-            '语言：仅英文原版\n' +
-            '性能：极低（建议使用高性能的电脑）\n' +
+    detail: '语言：仅英文原版\n' +
+            '性能：极低(建议使用高性能的电脑)\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✗\n' +
             '资源：自定义材质包',
     path: '26.1.2',
-    mirrors: [
-      { name: 'Beta 站', url: 'https://mcjs-beta.144449.xyz/26.1.2' }
-    ],
+    mirrors: makeBetaMirrors('26.1.2', 'https://enchantment-niko.github.io/webmc/26.1.2/novix-1.2.html'),
+    external: true
+  },
+  {
+    id: '26.2',
+    name: 'Eaglercraft 26.2 WASM',
+    version: 'MC JE 26.2 0.4-dev',
+    author: 'o_xer',
+    translator: 'Enchantment-Niko, o_xer',
+    type: 'new-beta',
+    engine: 'WASM',
+    size: '~60MB',
+    lang: ['简体中文', 'English'],
+    features: ['单机'],
+    multiplayer: false,
+    modpack: false,
+    description: '最新开发版。非常不稳定，仅单机。需要高性能电脑。',
+    detail: '语言：简体中文、英文\n' +
+            '性能：低(建议使用高性能的电脑)\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✗ 远程联机 ✗\n' +
+            '资源：自定义材质包',
+    path: '26.2',
+    mirrors: makeBetaMirrors('26.2', 'https://enchantment-niko.github.io/webmc/26.2/'),
     external: true
   },
 
@@ -238,20 +288,13 @@ const VERSIONS = [
     multiplayer: true,
     modpack: true,
     description: '1.6.4 Forge 轻量模组整合包。需要高性能电脑。仅限英文。',
-    detail:'语言：仅英文原版\n' +
+    detail: '语言：仅英文原版\n' +
             '性能：较低\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '资源：自定义材质包、内置模组包',
     path: 'modpack/lite',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/modpack/lite/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/modpack/lite/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/modpack/lite/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/modpack/lite/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/modpack/lite/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/modpack/lite/' }
-    ],
+    mirrors: makeMirrors('modpack/lite'),
     external: true
   },
   {
@@ -267,21 +310,14 @@ const VERSIONS = [
     multiplayer: true,
     modpack: true,
     description: '1.6.4 Forge 硬核科技模组整合包。文件大，启动久。仅限英文。',
-    detail:'文件较大，启动时间较长\n' +
+    detail: '文件较大，启动时间较长\n' +
             '语言：仅英文原版\n' +
-            '性能：低（建议使用高性能的电脑）\n' +
+            '性能：低(建议使用高性能的电脑)\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '资源：自定义材质包、内置模组包',
     path: 'modpack/tech',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/modpack/tech/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/modpack/tech/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/modpack/tech/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/modpack/tech/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/modpack/tech/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/modpack/tech/' }
-    ],
+    mirrors: makeMirrors('modpack/tech'),
     external: true
   },
   {
@@ -297,21 +333,14 @@ const VERSIONS = [
     multiplayer: true,
     modpack: true,
     description: '1.6.4 Forge 天空工厂模组整合包。文件大，启动久。仅限英文。',
-    detail:'文件较大，启动时间较长\n' +
+    detail: '文件较大，启动时间较长\n' +
             '语言：仅英文原版\n' +
-            '性能：低（建议使用高性能的电脑）\n' +
+            '性能：低(建议使用高性能的电脑)\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '资源：自定义材质包、内置模组包',
     path: 'modpack/skyfactory',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/modpack/skyfactory/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/modpack/skyfactory/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/modpack/skyfactory/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/modpack/skyfactory/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/modpack/skyfactory/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/modpack/skyfactory/' }
-    ],
+    mirrors: makeMirrors('modpack/skyfactory'),
     external: true
   },
   {
@@ -327,22 +356,143 @@ const VERSIONS = [
     multiplayer: true,
     modpack: true,
     description: '1.6.4 Forge 神奇魔法模组整合包。文件大，启动久。仅限英文。',
-    detail:'文件较大，启动时间较长\n' +
+    detail: '文件较大，启动时间较长\n' +
             '语言：仅英文原版\n' +
-            '性能：低（建议使用高性能的电脑）\n' +
+            '性能：低(建议使用高性能的电脑)\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
             '资源：自定义材质包、内置模组包',
     path: 'modpack/magic',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/modpack/magic/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/modpack/magic/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/modpack/magic/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/modpack/magic/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/modpack/magic/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/modpack/magic/' }
-    ],
+    mirrors: makeMirrors('modpack/magic'),
     external: true
+  },
+
+  // === 第三方 Eaglercraft 客户端 ===
+  {
+    id: 'pixelclient/1.8.8',
+    name: 'PixelClient 1.8.8',
+    version: 'MC JE 1.8.8 JS Modded',
+    author: 'PixelClient',
+    type: 'third-party',
+    engine: 'JS',
+    size: '~22MB',
+    lang: ['部分翻译中文', 'English'],
+    features: ['远程联机', '局域网', '定制主题'],
+    multiplayer: true,
+    modpack: false,
+    description: 'PixelClient 定制第三方客户端。魔改界面和功能。',
+    detail: '语言：部分翻译中文、英文\n' +
+            '性能：较高\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '资源：PixelClient 定制主题',
+    path: 'pixelclient/1.8.8',
+    mirrors: makeMirrors('pixelclient/1.8.8')
+  },
+  {
+    id: 'pixelclient/1.8.8wasm',
+    name: 'PixelClient 1.8.8 WASM',
+    version: 'MC JE 1.8.8 WASM-GC Modded',
+    author: 'PixelClient',
+    type: 'third-party',
+    engine: 'WASM',
+    size: '~10MB',
+    lang: ['部分翻译中文', 'English'],
+    features: ['远程联机', '局域网', '定制主题'],
+    multiplayer: true,
+    modpack: false,
+    description: 'PixelClient WASM 版本。更高性能，定制界面。',
+    detail: '语言：部分翻译中文、英文\n' +
+            '性能：高\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '资源：PixelClient 定制主题',
+    path: 'pixelclient/1.8.8wasm',
+    mirrors: makeMirrors('pixelclient/1.8.8wasm')
+  },
+  {
+    id: 'pixelclient/1.12.2',
+    name: 'PixelClient 1.12.2',
+    version: 'MC JE 1.12.2 JS Modded',
+    author: 'PixelClient',
+    type: 'third-party',
+    engine: 'JS',
+    size: '~28MB',
+    lang: ['English'],
+    features: ['远程联机', '局域网', '定制主题'],
+    multiplayer: true,
+    modpack: false,
+    description: 'PixelClient 1.12.2 定制版。仅英文。',
+    detail: '语言：仅英文原版\n' +
+            '性能：中\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '资源：PixelClient 定制主题',
+    path: 'pixelclient/1.12.2',
+    mirrors: makeMirrors('pixelclient/1.12.2')
+  },
+  {
+    id: 'pixelclient/1.12.2wasm',
+    name: 'PixelClient 1.12.2 WASM',
+    version: 'MC JE 1.12.2 WASM-GC Modded',
+    author: 'PixelClient',
+    type: 'third-party',
+    engine: 'WASM',
+    size: '~18MB',
+    lang: ['English'],
+    features: ['远程联机', '局域网', '定制主题'],
+    multiplayer: true,
+    modpack: false,
+    description: 'PixelClient 1.12.2 WASM 版本。更高性能。',
+    detail: '语言：仅英文原版\n' +
+            '性能：较高\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '资源：PixelClient 定制主题',
+    path: 'pixelclient/1.12.2wasm',
+    mirrors: makeMirrors('pixelclient/1.12.2wasm')
+  },
+  {
+    id: 'tuffclient/1.12.2',
+    name: 'TuffClient 1.12.2',
+    version: 'MC JE 1.12.2 JS Modded',
+    author: 'TuffClient',
+    type: 'third-party',
+    engine: 'JS',
+    size: '~28MB',
+    lang: ['English'],
+    features: ['远程联机', '局域网', '定制主题'],
+    multiplayer: true,
+    modpack: false,
+    description: 'TuffClient 定制第三方客户端。仅英文。',
+    detail: '语言：仅英文原版\n' +
+            '性能：中\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '资源：TuffClient 定制主题',
+    path: 'tuffclient/1.12.2',
+    mirrors: makeMirrors('tuffclient/1.12.2')
+  },
+  {
+    id: 'tuffclient/1.12.2wasm',
+    name: 'TuffClient 1.12.2 WASM',
+    version: 'MC JE 1.12.2 WASM-GC Modded',
+    author: 'TuffClient',
+    type: 'third-party',
+    engine: 'WASM',
+    size: '~18MB',
+    lang: ['English'],
+    features: ['远程联机', '局域网', '定制主题'],
+    multiplayer: true,
+    modpack: false,
+    description: 'TuffClient WASM 版本。更高性能，定制界面。',
+    detail: '语言：仅英文原版\n' +
+            '性能：较高\n' +
+            '设备：仅支持电脑键鼠操作\n' +
+            '联机：单机 ✓ 局域网 ✓ 远程联机 ✓\n' +
+            '资源：TuffClient 定制主题',
+    path: 'tuffclient/1.12.2wasm',
+    mirrors: makeMirrors('tuffclient/1.12.2wasm')
   },
 
   // === 经典旧版 ===
@@ -363,19 +513,12 @@ const VERSIONS = [
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: '1.6.4',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.6.4/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.6.4/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.6.4/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.6.4/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.6.4/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.6.4/' }
-    ]
+    mirrors: makeMirrors('1.6.4')
   },
   {
     id: '1.5.2',
     name: 'Eaglercraft 1.5.2',
-    version: 'MC JE 1.5.2 JS SP2',
+    version: 'MC JE 1.5.2 JS SP2 Update',
     author: 'lax1dude, ayunami2000',
     type: 'legacy',
     engine: 'JS',
@@ -385,18 +528,11 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: '最初的 Eaglercraft 版本。红石更新时代。仅限英文。',
-    detail:'语言：仅英文原版\n' +
+    detail: '语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: '1.5.2',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.5.2/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.5.2/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.5.2/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.5.2/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.5.2/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.5.2/' }
-    ]
+    mirrors: makeMirrors('1.5.2')
   },
   {
     id: '1.2.5',
@@ -411,18 +547,11 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: 'Minecraft 经典时代。仅限英文，复古体验。',
-    detail:'语言：仅英文原版\n' +
+    detail: '语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: '1.2.5',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/1.2.5/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/1.2.5/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/1.2.5/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/1.2.5/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/1.2.5/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/1.2.5/' }
-    ]
+    mirrors: makeMirrors('1.2.5')
   },
   {
     id: 'legacy/beta1.7.3',
@@ -437,18 +566,11 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: 'Beta 时代 Minecraft。仅限英文，怀旧体验。',
-    detail:'语言：仅英文原版\n' +
+    detail: '语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: 'legacy/beta1.7.3',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/legacy/beta1.7.3/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/legacy/beta1.7.3/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/legacy/beta1.7.3/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/legacy/beta1.7.3/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/legacy/beta1.7.3/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/legacy/beta1.7.3/' }
-    ]
+    mirrors: makeMirrors('legacy/beta1.7.3')
   },
   {
     id: 'legacy/beta1.3',
@@ -463,18 +585,11 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: '最早的 Eaglercraft 单机版本。仅限英文，非常复古。',
-    detail:'语言：仅英文原版\n' +
+    detail: '语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: 'legacy/beta1.3',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/legacy/beta1.3/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/legacy/beta1.3/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/legacy/beta1.3/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/legacy/beta1.3/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/legacy/beta1.3/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/legacy/beta1.3/' }
-    ]
+    mirrors: makeMirrors('legacy/beta1.3')
   },
   {
     id: 'legacy/alpha1.2.6',
@@ -489,34 +604,17 @@ const VERSIONS = [
     multiplayer: false,
     modpack: false,
     description: 'Alpha 时代 Minecraft。最早的 Eaglercraft 可玩版本。仅限英文。',
-    detail:'语言：仅英文原版\n' +
+    detail: '语言：仅英文原版\n' +
             '设备：仅支持电脑键鼠操作\n' +
             '联机：单机 ✓ 局域网 ✗ 远程联机 ✗',
     path: 'legacy/alpha1.2.6',
-    mirrors: [
-      { name: '镜像站 1', url: 'https://playmcjscc.pages.dev/legacy/alpha1.2.6/' },
-      { name: '镜像站 2', url: 'https://play.mcjs.144449.xyz/legacy/alpha1.2.6/' },
-      { name: '镜像站 3', url: 'https://ipv6.mcjs.cc/legacy/alpha1.2.6/' },
-      { name: '镜像站 4', url: 'https://mirror.mcjs.cc/legacy/alpha1.2.6/' },
-      { name: '镜像站 5', url: 'https://mcjs-mirror.144449.xyz/legacy/alpha1.2.6/' },
-      { name: '镜像站 6', url: 'https://mcjs-mirror-test.144449.xyz/legacy/alpha1.2.6/' }
-    ]
+    mirrors: makeMirrors('legacy/alpha1.2.6')
   }
 ];
 
-
-
-const MIRROR_BASES = [
-  'https://playmcjscc.pages.dev',
-  'https://play.mcjs.144449.xyz',
-  'https://ipv6.mcjs.cc',
-  'https://mirror.mcjs.cc',
-  'https://mcjs-mirror.144449.xyz',
-  'https://mcjs-mirror-test.144449.xyz'
-];
-
-// 暴露到全局,确保跨脚本可访问
+// 暴露到全局
 if (typeof window !== 'undefined') {
   window.VERSIONS = VERSIONS;
   window.MIRROR_BASES = MIRROR_BASES;
+  window.BETA_MIRROR_BASE = BETA_MIRROR_BASE;
 }

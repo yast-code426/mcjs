@@ -126,11 +126,6 @@
     d.innerHTML = html.trim();
     return d.firstChild;
   }
-  function escapeHtml(s) {
-    var d = document.createElement('div');
-    d.textContent = String(s == null ? '' : s);
-    return d.innerHTML;
-  }
   function uid() {
     return 'user.' + Math.random().toString(36).slice(2, 10);
   }

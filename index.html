@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
-  <title>MCJS Launcher — Eaglercraft 全版本启动器 v3.0</title>
+  <title>MCJS Launcher — Eaglercraft 全版本启动器 v1.2</title>
   <meta name="description" content="MCJS 镜像站启动器 · 全版本网页版 Minecraft，本地运行，无需跳转 · 内置插件市场" />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
@@ -72,8 +72,8 @@
             </svg>
           </div>
           <div class="logo-text">
-            <h1>MCJS Launcher</h1>
-            <span class="subtitle">Eaglercraft 全版本启动器 · v3.0</span>
+            <span class="logo-title">MCJS Launcher</span>
+            <span class="subtitle">Eaglercraft 全版本启动器 · v1.2</span>
           </div>
         </div>
         <div class="header-actions">
@@ -180,7 +180,7 @@
         </div>
         <div class="faq-item">
           <div class="faq-question">插件市场是什么？如何使用？</div>
-          <div class="faq-answer">插件市场是 MCJS v3.0 新增的功能中心。所有兼容性增强、注入代码、性能优化均通过 <span class="hl">插件</span> 实现。你可以从市场安装官方插件，或自己编写/导入第三方插件。详细文档请见 <span class="hl">插件开发文档</span>。</div>
+          <div class="faq-answer">插件市场是 MCJS v1.2 新增的功能中心。所有兼容性增强、注入代码、性能优化均通过 <span class="hl">插件</span> 实现。你可以从市场安装官方插件，或自己编写/导入第三方插件。详细文档请见 <span class="hl">插件开发文档</span>。</div>
         </div>
         <div class="faq-item">
           <div class="faq-question">多人游戏如何联机？</div>
@@ -202,9 +202,40 @@
     </main>
 
     <footer class="footer">
-      <p>MCJS Launcher 是基于 Eaglercraft 的社区启动器 · v3.0 内置插件市场</p>
+      <p>MCJS Launcher 是基于 Eaglercraft 的社区启动器 · v1.2 内置插件市场</p>
       <p>游戏文件来源于公共 CDN 镜像，与 Minecraft、Mojang 无任何从属关系</p>
     </footer>
+  </div>
+
+  <!-- 更新公告弹窗 -->
+  <div class="modal-overlay" id="announceModal" style="display:none;">
+    <div class="modal modal-announce">
+      <div class="announce-header">
+        <h2>更新公告</h2>
+        <span class="announce-version">v1.2</span>
+      </div>
+      <div class="announce-body" id="announceBody">
+        <div class="announce-content">
+          <h3>MCJS Launcher v1.2 更新内容</h3>
+          <ul>
+            <li><strong>新增镜像站</strong>：从 6 个扩展到 14 个，新增 7 个 mcjslink 镜像站</li>
+            <li><strong>新增版本</strong>：1.14.4 WASM、1.20.6 WASM、26.2 WASM</li>
+            <li><strong>新增第三方客户端</strong>：PixelClient（1.8.8/1.12.2 JS+WASM）、TuffClient（1.12.2 JS+WASM）</li>
+            <li><strong>版本更新</strong>：1.12.2/1.12.2WASM 热更新至 u3，支持中文翻译和联机</li>
+            <li><strong>版本更新</strong>：1.16.5 更新至 u3 beta，26.1.2 标识为 WebGL2</li>
+            <li><strong>插件系统修复</strong>：修复钩子重复注入 Bug，增强钩子检测和输入校验</li>
+            <li><strong>UI 修复</strong>：修复特性标签替换顺序、事件重复绑定、CSS 重复定义等问题</li>
+          </ul>
+        </div>
+      </div>
+      <div class="announce-footer">
+        <span class="announce-timer" id="announceTimer">请阅读 3 秒后可关闭…</span>
+        <div class="announce-actions">
+          <button class="announce-btn announce-btn-today" id="announceCloseToday" disabled>今日不再显示</button>
+          <button class="announce-btn announce-btn-forever" id="announceCloseForever" disabled>永久关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 镜像选择弹窗 -->
