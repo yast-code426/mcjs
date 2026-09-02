@@ -1,4 +1,4 @@
-/* MCJS Launcher - Main Application */
+﻿/* MCJS Launcher - Main Application */
 (function(){'use strict';
 
 /* ========== DOM Refs ========== */
@@ -31,7 +31,12 @@ var DEFAULT_APP_SETTINGS = {
   loadingDetail: true,
   quickLaunch: false,
   reduceMotion: false,
-  popupLaunch: false
+  popupLaunch: false,
+  debugMode: false,
+  verboseLog: false,
+  disableCache: false,
+  showDebugOverlay: false,
+  testMode: false
 };
 
 function ensureSettingsDefaults(s) {
@@ -562,19 +567,24 @@ function renderMirrorSelection(ver){
   var container = document.getElementById('mirrorList');
   var html = '<div class="auto-launch-btn" id="autoLaunchBtn" role="button" tabindex="0">' +
     '<span class="auto-launch-icon">▶</span>' +
-    '<div><div class="auto-launch-name">自动选择（推荐镜像）</div>' +
-    '<div class="auto-launch-desc">使用默认镜像直接启动</div></div>' +
+    '<div><div class="auto-launch-name">自动选择（智能最快镜像）</div>' +
+    '<div class="auto-launch-desc">并发测速，自动连接延迟最低的镜像</div></div>' +
+  '</div>' +
+  '<div class="mirror-speed-bar">' +
+    '<button class="mirror-speed-btn" id="mirrorSpeedTestBtn" type="button">📡 测速镜像延迟</button>' +
+    '<span class="mirror-speed-hint" id="mirrorSpeedHint"></span>' +
   '</div>';
   html += ver.mirrors.map(function(m, i){
     return '<div class="mirror-item" data-mirror="' + i + '" role="button" tabindex="0">' +
-      '<div class="mirror-item-name">' + escapeHtml2(m.name) + '</div>' +
+      '<div class="mirror-item-row"><div class="mirror-item-name">' + escapeHtml2(m.name) + '</div>' +
+      '<span class="mirror-ping" data-ping="' + i + '">—</span></div>' +
       '<div class="mirror-item-url">' + escapeHtml2(m.url) + '</div>' +
     '</div>';
   }).join('');
   container.innerHTML = html;
   document.getElementById('autoLaunchBtn').addEventListener('click', function(){
     if(sound) sound.click();
-    startGameLaunch(ver);
+    startGameLaunch(ver, true);
   });
   document.getElementById('autoLaunchBtn').addEventListener('keydown', function(e){
     if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); startGameLaunch(ver); }
@@ -590,6 +600,63 @@ function renderMirrorSelection(ver){
         if(sound) sound.close();
         launchModal.classList.remove('active');
       }
+    });
+  }
+  // ===== 镜像测速(并发 ping,显示延迟) =====
+  var speedBtn = document.getElementById('mirrorSpeedTestBtn');
+  var speedHint = document.getElementById('mirrorSpeedHint');
+  if (speedBtn && !speedBtn._mcjsBound) {
+    speedBtn._mcjsBound = true;
+    speedBtn.addEventListener('click', function(){
+      if (speedBtn.disabled) return;
+      speedBtn.disabled = true;
+      speedBtn.textContent = '⏳ 测速中…';
+      if (speedHint) speedHint.textContent = '';
+      var pingEls = container.querySelectorAll('.mirror-ping');
+      for (var pi=0; pi<pingEls.length; pi++){ pingEls[pi].textContent = '…'; pingEls[pi].className = 'mirror-ping'; }
+      var done = 0, total = ver.mirrors.length, results = [];
+      var BATCH = 6; // 每批并发 6 个,避免一次性请求过多
+      var idx = 0;
+      function launchBatch(){
+        var batch = [];
+        while(idx < ver.mirrors.length && batch.length < BATCH){
+          (function(mirrorIndex){
+            var m = ver.mirrors[mirrorIndex];
+            var url = window.MCJS_GAME.buildMirrorURL(m, ver);
+            var el = container.querySelector('.mirror-ping[data-ping="'+mirrorIndex+'"]');
+            batch.push(
+              window.MCJS_GAME.pingMirror(url, 6000).then(function(res){
+                if (el){
+                  if (res){
+                    el.textContent = res.latency + ' ms';
+                    el.className = 'mirror-ping ' + (res.latency < 800 ? 'ping-good' : (res.latency < 2000 ? 'ping-mid' : 'ping-bad'));
+                    results.push({ idx: mirrorIndex, latency: res.latency });
+                  } else {
+                    el.textContent = '不可用';
+                    el.className = 'mirror-ping ping-bad';
+                  }
+                }
+              }).catch(function(){
+                if (el){ el.textContent = '失败'; el.className = 'mirror-ping ping-bad'; }
+              })
+            );
+          })(idx);
+          idx++;
+        }
+        if (batch.length === 0){
+          speedBtn.disabled = false;
+          speedBtn.textContent = '📡 重新测速';
+          if (speedHint && results.length > 0){
+            results.sort(function(a,b){ return a.latency - b.latency; });
+            speedHint.textContent = '最快:镜像 ' + (results[0].idx + 1) + ' (' + results[0].latency + ' ms),点击它启动';
+          } else if (speedHint){
+            speedHint.textContent = '所有镜像暂不可达,请检查网络';
+          }
+          return;
+        }
+        Promise.all(batch).then(function(){ launchBatch(); });
+      }
+      launchBatch();
     });
   }
   container.querySelectorAll('.mirror-item').forEach(function(el){
@@ -614,8 +681,9 @@ function renderMirrorSelection(ver){
   });
 }
 
-function startGameLaunch(ver){
+function startGameLaunch(ver, autoMode){
   if (isLaunching) return;
+  var launchAuto = autoMode === true;
   
   if (settings.popupLaunch) {
     launchInPopup(ver);
@@ -684,7 +752,8 @@ function startGameLaunch(ver){
         };
         launchContent.appendChild(retryBtn);
       } catch(e){}
-    }
+    },
+    launchAuto
   );
 }
 
@@ -921,6 +990,22 @@ function buildSettingsHTML() {
     '.toast.show { opacity:1; }\n' +
     '.toast.error { background:var(--accent-red); box-shadow:0 4px 16px rgba(239,68,68,0.30); }\n' +
     '@media (max-width:480px) { .settings-window { max-height:100vh; border-radius:0; max-width:100%; } .settings-body { padding:14px 16px 20px; } .settings-header { padding:14px 16px; } }\n' +
+    '.ann-history { margin-top:10px; max-height:0; overflow:hidden; transition:max-height 0.35s ease; }\n' +
+    '.ann-history.open { max-height: 460px; overflow-y:auto; }\n' +
+    '.ann-entry { padding:10px 12px; background:var(--bg-detail); border-radius:var(--radius-sm); margin-bottom:10px; }\n' +
+    '.ann-entry-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }\n' +
+    '.ann-entry-version { font-family:var(--font-mono); font-size:0.78rem; font-weight:700; color:var(--accent-green); }\n' +
+    '.ann-entry-date { font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint); }\n' +
+    '.ann-entry-title { font-size:0.9rem; font-weight:700; color:var(--text-primary); margin-bottom:6px; }\n' +
+    '.ann-entry-list { list-style:none; margin:0; padding:0; }\n' +
+    '.ann-entry-list li { font-size:0.8rem; color:var(--text-secondary); line-height:1.55; padding:3px 0; }\n' +
+    '.ann-entry-list li strong { color:var(--text-primary); }\n' +
+    '.ann-tag { display:inline-block; min-width:34px; text-align:center; font-size:0.68rem; font-weight:700; border-radius:4px; padding:1px 6px; margin-right:6px; }\n' +
+    '.ann-tag-new { background:rgba(34,197,94,0.15); color:var(--accent-green-strong); }\n' +
+    '.ann-tag-fix { background:rgba(239,68,68,0.12); color:var(--accent-red); }\n' +
+    '.ann-tag-opt { background:rgba(59,130,246,0.12); color:var(--accent-blue); }\n' +
+    '.ann-tag-other { background:rgba(0,0,0,0.08); color:var(--text-muted); }\n' +
+    '.ann-entry-divider { height:1px; background:var(--border-soft); margin:10px 0; }\n' +
     '</style>\n' +
     '</head>\n<body>\n' +
     '<div class="settings-window">\n' +
@@ -1054,6 +1139,53 @@ function buildSettingsHTML() {
     '    </div>\n' +
 
     '    <div class="settings-group">\n' +
+    '      <div class="settings-group-title">工程调试</div>\n' +
+    '      <div class="setting-item">\n' +
+    '        <div class="setting-label"><span>调试模式</span><small>显示详细错误信息和调用栈</small></div>\n' +
+    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.debugMode) + '" id="settingDebugMode" type="button" role="switch" aria-checked="' + toggleAria(s.debugMode) + '"></button></div>\n' +
+    '      </div>\n' +
+    '      <div class="setting-item">\n' +
+    '        <div class="setting-label"><span>详细日志</span><small>输出所有加载步骤和钩子调用日志</small></div>\n' +
+    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.verboseLog) + '" id="settingVerboseLog" type="button" role="switch" aria-checked="' + toggleAria(s.verboseLog) + '"></button></div>\n' +
+    '      </div>\n' +
+    '      <div class="setting-item">\n' +
+    '        <div class="setting-label"><span>禁用缓存</span><small>每次启动重新下载游戏文件（测试用）</small></div>\n' +
+    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.disableCache) + '" id="settingDisableCache" type="button" role="switch" aria-checked="' + toggleAria(s.disableCache) + '"></button></div>\n' +
+    '      </div>\n' +
+    '      <div class="setting-item">\n' +
+    '        <div class="setting-label"><span>调试浮层</span><small>在游戏画面上显示 FPS 和性能信息</small></div>\n' +
+    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.showDebugOverlay) + '" id="settingShowDebugOverlay" type="button" role="switch" aria-checked="' + toggleAria(s.showDebugOverlay) + '"></button></div>\n' +
+    '      </div>\n' +
+    '      <div class="setting-item">\n' +
+    '        <div class="setting-label"><span>测试模式</span><small>使用测试镜像和未发布版本</small></div>\n' +
+    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.testMode) + '" id="settingTestMode" type="button" role="switch" aria-checked="' + toggleAria(s.testMode) + '"></button></div>\n' +
+    '      </div>\n' +
+    '    </div>\n' +
+    '\n' +
+    '    <div class="settings-group">\n' +
+    '      <div class="settings-group-title">浏览器信息</div>\n' +
+    '      <div class="cache-info" id="browserInfo" style="font-family:var(--font-mono); font-size:0.78rem;">\n' +
+    '        <div class="cache-info-row"><span>浏览器</span><strong id="biBrowser">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>内核</span><strong id="biEngine">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>操作系统</span><strong id="biOS">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>平台</span><strong id="biPlatform">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>屏幕分辨率</span><strong id="biScreen">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>CPU 核心</span><strong id="biCores">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>内存</span><strong id="biMem">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>语言</span><strong id="biLang">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>触摸支持</span><strong id="biTouch">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>WebAssembly</span><strong id="biWasm">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>WebGL</span><strong id="biWebGL">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>WebGL2</span><strong id="biWebGL2">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>GPU</span><strong id="biGPU">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>Cookie</span><strong id="biCookie">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>在线状态</span><strong id="biOnline">检测中…</strong></div>\n' +
+    '        <div class="cache-info-row"><span>User Agent</span><strong id="biUA" style="word-break:break-all; font-size:0.7rem; line-height:1.4;">检测中…</strong></div>\n' +
+    '      </div>\n' +
+    '      <button class="action-btn" id="copyBrowserInfoBtn" style="margin-top:6px;">复制浏览器信息</button>\n' +
+    '    </div>\n' +
+    '\n' +
+    '    <div class="settings-group">\n' +
     '      <div class="settings-group-title">音效与辅助</div>\n' +
     '      <div class="setting-item">\n' +
     '        <div class="setting-label"><span>音效</span><small>启动器界面音效</small></div>\n' +
@@ -1065,6 +1197,15 @@ function buildSettingsHTML() {
     '      </div>\n' +
     '    </div>\n' +
 
+    '    <div class="settings-group">\n' +
+    '      <div class="settings-group-title">更新公告</div>\n' +
+    '      <div class="setting-item" style="border-top:none;">\n' +
+    '        <div class="setting-label"><span>历史公告</span><small>查看启动器历代全部更新公告</small></div>\n' +
+    '        <div class="setting-control"><button class="action-btn" id="openAnnHistoryBtn" style="margin-top:0; white-space:nowrap; padding:6px 14px;">查看公告</button></div>\n' +
+    '      </div>\n' +
+    '      <div class="ann-history" id="annHistoryBox"></div>\n' +
+    '    </div>\n' +
+    '\n' +
     '    <div class="settings-actions">\n' +
     '      <button class="btn btn-secondary" id="settingsCancelBtn">取消</button>\n' +
     '      <button class="btn btn-primary" id="settingsSaveBtn">保存设置</button>\n' +
@@ -1077,7 +1218,7 @@ function buildSettingsHTML() {
     '(function() {\n' +
     '  var settings = {};\n' +
     '  try { var stored = localStorage.getItem("mcjs_settings"); settings = stored ? JSON.parse(stored) : {}; } catch(e) {}\n' +
-    '  var defaults = { mirrorIndex:0, memoryLimit:512, autoClean:true, saveIsolation:true, gpuPrefer:"high-performance", cacheSizeLimit:2048, bgImage:true, soundEnabled:true, fullscreenLaunch:false, fontSize:"normal", cardDensity:"comfortable", autoUpdateCheck:true, loadingDetail:true, quickLaunch:false, reduceMotion:false, popupLaunch:false };\n' +
+    '  var defaults = { mirrorIndex:0, memoryLimit:512, autoClean:true, saveIsolation:true, gpuPrefer:"high-performance", cacheSizeLimit:2048, bgImage:true, soundEnabled:true, fullscreenLaunch:false, fontSize:"normal", cardDensity:"comfortable", autoUpdateCheck:true, loadingDetail:true, quickLaunch:false, reduceMotion:false, popupLaunch:false, debugMode:false, verboseLog:false, disableCache:false, showDebugOverlay:false, testMode:false };\n' +
     '  Object.keys(defaults).forEach(function(k){ if(settings[k]===undefined) settings[k]=defaults[k]; });\n' +
     '  var dirty = false;\n' +
     '  var toastTimer = null;\n' +
@@ -1097,6 +1238,11 @@ function buildSettingsHTML() {
     '  bindToggle("settingReduceMotion", "reduceMotion");\n' +
     '  bindToggle("settingSound", "soundEnabled");\n' +
     '  bindToggle("settingAutoUpdateCheck", "autoUpdateCheck");\n' +
+    '  bindToggle("settingDebugMode", "debugMode");\n' +
+    '  bindToggle("settingVerboseLog", "verboseLog");\n' +
+    '  bindToggle("settingDisableCache", "disableCache");\n' +
+    '  bindToggle("settingShowDebugOverlay", "showDebugOverlay");\n' +
+    '  bindToggle("settingTestMode", "testMode");\n' +
     '  bindSelect("settingMirror", "mirrorIndex");\n' +
     '  bindSelect("settingGPU", "gpuPrefer");\n' +
     '  bindSelect("settingFontSize", "fontSize");\n' +
@@ -1130,6 +1276,88 @@ function buildSettingsHTML() {
     '  doRequestCacheInfo();\n' +
     '  if (cacheInfoTimer) clearInterval(cacheInfoTimer);\n' +
     '  cacheInfoTimer = setInterval(doRequestCacheInfo, 3000);\n' +
+    '  \n' +
+    '  function detectBrowserInfo() {\n' +
+    '    var ua = navigator.userAgent || "";\n' +
+    '    var browser = "未知", engine = "未知";\n' +
+    '    if (/Edg\\/(\\d+)/.test(ua)) { browser = "Edge " + RegExp.$1; engine = "Blink"; }\n' +
+    '    else if (/OPR\\/(\\d+)/.test(ua)) { browser = "Opera " + RegExp.$1; engine = "Blink"; }\n' +
+    '    else if (/Chrome\\/(\\d+)/.test(ua)) { browser = "Chrome " + RegExp.$1; engine = "Blink"; }\n' +
+    '    else if (/Firefox\\/(\\d+)/.test(ua)) { browser = "Firefox " + RegExp.$1; engine = "Gecko"; }\n' +
+    '    else if (/Safari\\/(\\d+)/.test(ua)) { browser = "Safari " + RegExp.$1; engine = "WebKit"; }\n' +
+    '    var os = "未知";\n' +
+    '    if (/Windows NT 10/.test(ua)) os = "Windows 10/11";\n' +
+    '    else if (/Windows NT 6\.3/.test(ua)) os = "Windows 8.1";\n' +
+    '    else if (/Windows NT 6\.1/.test(ua)) os = "Windows 7";\n' +
+    '    else if (/Mac OS X ([\d_]+)/.test(ua)) os = "macOS " + RegExp.$1.replace(/_/g, ".");\n' +
+    '    else if (/Android (\\d+)/.test(ua)) os = "Android " + RegExp.$1;\n' +
+    '    else if (/iPhone OS (\\d+)/.test(ua)) os = "iOS " + RegExp.$1;\n' +
+    '    else if (/Linux/.test(ua)) os = "Linux";\n' +
+    '    var platform = navigator.platform || "未知";\n' +
+    '    var screen = (window.screen ? window.screen.width + " x " + window.screen.height : "未知") + " @ " + (window.devicePixelRatio || 1) + "x";\n' +
+    '    var cores = navigator.hardwareConcurrency || "未知";\n' +
+    '    var mem = navigator.deviceMemory ? navigator.deviceMemory + " GB" : "未知";\n' +
+    '    var lang = navigator.language || "未知";\n' +
+    '    var touch = ("ontouchstart" in window) ? "支持" : "不支持";\n' +
+    '    var wasm = (typeof WebAssembly !== "undefined") ? "支持" : "不支持";\n' +
+    '    var webgl = "不支持", webgl2 = "不支持", gpu = "未知";\n' +
+    '    try {\n' +
+    '      var c = document.createElement("canvas").getContext("webgl");\n' +
+    '      if (c) { webgl = "支持"; var dbg = c.getExtension("WEBGL_debug_renderer_info"); if (dbg) gpu = c.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "未知"; }\n' +
+    '    } catch(e) {}\n' +
+    '    try {\n' +
+    '      var c2 = document.createElement("canvas").getContext("webgl2");\n' +
+    '      if (c2) webgl2 = "支持";\n' +
+    '    } catch(e) {}\n' +
+    '    var cookie = navigator.cookieEnabled ? "启用" : "禁用";\n' +
+    '    var online = navigator.onLine ? "在线" : "离线";\n' +
+    '    var set = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };\n' +
+    '    set("biBrowser", browser); set("biEngine", engine); set("biOS", os);\n' +
+    '    set("biPlatform", platform); set("biScreen", screen); set("biCores", cores);\n' +
+    '    set("biMem", mem); set("biLang", lang); set("biTouch", touch);\n' +
+    '    set("biWasm", wasm); set("biWebGL", webgl); set("biWebGL2", webgl2);\n' +
+    '    set("biGPU", gpu); set("biCookie", cookie); set("biOnline", online);\n' +
+    '    set("biUA", ua);\n' +
+    '    window._mcjsBrowserInfo = { browser:browser, engine:engine, os:os, platform:platform, screen:screen, cores:cores, mem:mem, lang:lang, touch:touch, wasm:wasm, webgl:webgl, webgl2:webgl2, gpu:gpu, cookie:cookie, online:online, ua:ua };\n' +
+    '  }\n' +
+    '  detectBrowserInfo();\n' +
+'  \n' +
+'  // ===== 历代更新公告 =====\n' +
+'  (function(){\n' +
+'    var box = document.getElementById("annHistoryBox");\n' +
+'    var btn = document.getElementById("openAnnHistoryBtn");\n' +
+'    function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }\n' +
+'    function tagCls(t){ if(t==="修复")return "ann-tag-fix"; if(t==="新增"||t==="首发")return "ann-tag-new"; if(t==="优化")return "ann-tag-opt"; return "ann-tag-other"; }\n' +
+'    function renderList(list){\n' +
+'      var html = "";\n' +
+'      for(var i=0;i<list.length;i++){ var a=list[i]; var items="";\n' +
+'        var arr=a.items||[];\n' +
+'        for(var j=0;j<arr.length;j++){ var it=arr[j]; items += "<li><span class=\\"ann-tag "+tagCls(it.tag)+"\\">"+esc(it.tag)+"</span>"+it.text+"</li>"; }\n' +
+'        html += "<div class=\\"ann-entry\\"><div class=\\"ann-entry-head\\"><span class=\\"ann-entry-version\\">"+esc(a.version)+"</span>"+(a.date?"<span class=\\"ann-entry-date\\">"+esc(a.date)+"</span>":"")+"</div><h3 class=\\"ann-entry-title\\">"+esc(a.title)+"</h3><ul class=\\"ann-entry-list\\">"+items+"</ul></div>";\n' +
+'        if(i<list.length-1) html += "<div class=\\"ann-entry-divider\\"></div>";\n' +
+'      }\n' +
+'      return html;\n' +
+'    }\n' +
+'    function getList(){\n' +
+'      try { if(window.opener && window.opener.MCJS_GET_ALL_ANNOUNCEMENTS){ return window.opener.MCJS_GET_ALL_ANNOUNCEMENTS(); } } catch(e){}\n' +
+'      try { if(window.MCJS_GET_ALL_ANNOUNCEMENTS){ return window.MCJS_GET_ALL_ANNOUNCEMENTS(); } } catch(e){}\n' +
+'      return [{ version:"v1.3.1", date:"2026-09-02", title:"更新公告", items:[{tag:"提示",text:"无法获取公告列表,请在主页面查看。"}] }];\n' +
+'    }\n' +
+'    var rendered = false;\n' +
+'    if(btn){ btn.addEventListener("click", function(){\n' +
+'      if(!box) return;\n' +
+'      if(!rendered){ box.innerHTML = renderList(getList()); rendered = true; }\n' +
+'      box.classList.toggle("open");\n' +
+'      btn.textContent = box.classList.contains("open") ? "收起公告" : "查看公告";\n' +
+'    }); }\n' +
+'  })();\n' +
+    '  var copyBtn = document.getElementById("copyBrowserInfoBtn");\n' +
+    '  if (copyBtn) copyBtn.addEventListener("click", function() {\n' +
+    '    var info = window._mcjsBrowserInfo || {};\n' +
+    '    var text = Object.keys(info).map(function(k){ return k + ": " + info[k]; }).join("\\n");\n' +
+    '    try { navigator.clipboard.writeText(text).then(function(){ showToast("已复制到剪贴板"); }).catch(function(){ showToast("复制失败", true); }); }\n' +
+    '    catch(e) { showToast("复制失败", true); }\n' +
+    '  });\n' +
     '  \n' +
     '  function saveAndClose() {\n' +
     '    try {\n' +
@@ -1338,7 +1566,15 @@ document.addEventListener('keydown', function(e){
     e.preventDefault();
     if(searchInput) searchInput.focus();
   }
-  
+
+  if(e.key === '?' || (e.key === '/' && e.shiftKey)){
+    if(e.ctrlKey || e.metaKey){
+      e.preventDefault();
+      var hm = document.getElementById('helpModal');
+      if(hm) hm.style.display = hm.style.display === 'none' ? 'flex' : 'none';
+    }
+  }
+
   if(e.key === 'Escape'){
     if(gameOverlay && gameOverlay.classList.contains('active')){
       cancelCurrentLaunch();
@@ -1349,6 +1585,8 @@ document.addEventListener('keydown', function(e){
     if(launchFailedModal && launchFailedModal.classList.contains('active')){
       launchFailedModal.classList.remove('active');
     }
+    var hm2 = document.getElementById('helpModal');
+    if(hm2 && hm2.style.display !== 'none') hm2.style.display = 'none';
   }
 });
 
@@ -1620,10 +1858,58 @@ function initFAQAccordion(){
   }
 }
 
-/* ========== 更新公告弹窗 ========== */
+/* ========== 更新公告(动态渲染 + 历代历史) ========== */
+function getLatestAnnouncement() {
+  if (window.MCJS_GET_LATEST_ANNOUNCEMENT) {
+    try { return window.MCJS_GET_LATEST_ANNOUNCEMENT(); } catch (e) {}
+  }
+  return { version: 'v1.3.1', date: '', title: '更新公告', items: [] };
+}
+
+function getAllAnnouncements() {
+  if (window.MCJS_GET_ALL_ANNOUNCEMENTS) {
+    try { return window.MCJS_GET_ALL_ANNOUNCEMENTS(); } catch (e) {}
+  }
+  return [ getLatestAnnouncement() ];
+}
+
+function renderAnnouncementHTML(list) {
+  var html = '';
+  for (var i = 0; i < list.length; i++) {
+    var a = list[i];
+    var items = '';
+    var itemsArr = a.items || [];
+    for (var j = 0; j < itemsArr.length; j++) {
+      var it = itemsArr[j];
+      var tag = it.tag || '';
+      var cls = 'ann-tag-other';
+      if (tag === '修复') cls = 'ann-tag-fix';
+      else if (tag === '新增' || tag === '首发') cls = 'ann-tag-new';
+      else if (tag === '优化') cls = 'ann-tag-opt';
+      items += '<li><span class="ann-tag ' + cls + '">' + escapeAnn(tag) + '</span>' + it.text + '</li>';
+    }
+    html += '<div class="ann-entry">' +
+      '<div class="ann-entry-head"><span class="ann-entry-version">' + escapeAnn(a.version) + '</span>' +
+      (a.date ? '<span class="ann-entry-date">' + escapeAnn(a.date) + '</span>' : '') +
+      '</div>' +
+      '<h3 class="ann-entry-title">' + escapeAnn(a.title) + '</h3>' +
+      '<ul class="ann-entry-list">' + items + '</ul>' +
+      (i < list.length - 1 ? '<div class="ann-entry-divider"></div>' : '') +
+      '</div>';
+  }
+  return html;
+}
+
+function escapeAnn(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function showAnnouncement() {
-  var ANNOUNCE_KEY = 'mcjs_announce_v1.2';
-  var ANNOUNCE_TODAY_KEY = 'mcjs_announce_today';
+  var latest = getLatestAnnouncement();
+  // 永久关闭 key 与公告版本绑定:新版本发布后会再次展示
+  var ANNOUNCE_KEY = 'mcjs_announce_closed_' + latest.version;
+  var ANNOUNCE_TODAY_KEY = 'mcjs_announce_today_' + latest.version;
   var READ_TIME = 3;
 
   try {
@@ -1632,10 +1918,17 @@ function showAnnouncement() {
     var today = localStorage.getItem(ANNOUNCE_TODAY_KEY);
     var todayStr = new Date().toDateString();
     if (today === todayStr) return;
-  } catch (e) { return; }
+  } catch (e) { /* localStorage 不可用时仍展示 */ }
 
   var modal = document.getElementById('announceModal');
   if (!modal) return;
+
+  // 动态填充最新公告内容
+  var contentEl = document.getElementById('announceContent');
+  if (contentEl) contentEl.innerHTML = renderAnnouncementHTML([ latest ]);
+  var tagEl = document.getElementById('announceVersionTag');
+  if (tagEl) tagEl.textContent = latest.version;
+
   modal.style.display = 'flex';
 
   var timerEl = document.getElementById('announceTimer');
@@ -1643,15 +1936,22 @@ function showAnnouncement() {
   var btnForever = document.getElementById('announceCloseForever');
   if (!timerEl || !btnToday || !btnForever) return;
 
+  // 重置按钮状态(防止重复绑定)
+  btnToday.disabled = true;
+  btnForever.disabled = true;
+  timerEl.classList.remove('ready');
+
   var countdown = READ_TIME;
   timerEl.textContent = '请阅读 ' + countdown + ' 秒后可关闭…';
+  if (window._mcjsAnnounceTimer) clearInterval(window._mcjsAnnounceTimer);
 
-  var interval = setInterval(function() {
+  window._mcjsAnnounceTimer = setInterval(function() {
     countdown--;
     if (countdown > 0) {
       timerEl.textContent = '请阅读 ' + countdown + ' 秒后可关闭…';
     } else {
-      clearInterval(interval);
+      clearInterval(window._mcjsAnnounceTimer);
+      window._mcjsAnnounceTimer = null;
       timerEl.textContent = '可以关闭了';
       timerEl.classList.add('ready');
       btnToday.disabled = false;
@@ -1659,16 +1959,61 @@ function showAnnouncement() {
     }
   }, 1000);
 
-  btnToday.addEventListener('click', function() {
-    if (btnToday.disabled) return;
-    try { localStorage.setItem(ANNOUNCE_TODAY_KEY, new Date().toDateString()); } catch (e) {}
-    modal.style.display = 'none';
-  });
+  if (!btnToday._mcjsBound) {
+    btnToday._mcjsBound = true;
+    btnToday.addEventListener('click', function() {
+      if (btnToday.disabled) return;
+      try { localStorage.setItem(ANNOUNCE_TODAY_KEY, new Date().toDateString()); } catch (e) {}
+      modal.style.display = 'none';
+    });
+  }
+  if (!btnForever._mcjsBound) {
+    btnForever._mcjsBound = true;
+    btnForever.addEventListener('click', function() {
+      if (btnForever.disabled) return;
+      try { localStorage.setItem(ANNOUNCE_KEY, 'closed'); } catch (e) {}
+      modal.style.display = 'none';
+    });
+  }
 
-  btnForever.addEventListener('click', function() {
-    if (btnForever.disabled) return;
-    try { localStorage.setItem(ANNOUNCE_KEY, 'closed'); } catch (e) {}
-    modal.style.display = 'none';
+  // "查看历代所有公告"链接
+  var histLink = document.getElementById('announceHistoryLink');
+  if (histLink && !histLink._mcjsBound) {
+    histLink._mcjsBound = true;
+    histLink.addEventListener('click', function() {
+      modal.style.display = 'none';
+      openAnnouncementHistory();
+    });
+  }
+
+  // ESC 关闭
+  if (!window._mcjsAnnEscBound) {
+    window._mcjsAnnEscBound = true;
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && modal.style.display === 'flex') {
+        if (!btnToday.disabled) modal.style.display = 'none';
+      }
+    });
+  }
+}
+
+/* 历代公告弹窗(主页面) */
+function openAnnouncementHistory() {
+  var overlay = document.getElementById('annHistoryModal');
+  if (!overlay) return;
+  var body = document.getElementById('annHistoryBody');
+  if (body) body.innerHTML = renderAnnouncementHTML(getAllAnnouncements());
+  overlay.style.display = 'flex';
+  if (overlay._mcjsBound) return;
+  overlay._mcjsBound = true;
+  var close = function() { overlay.style.display = 'none'; };
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) close();
+  });
+  var closeBtn = document.getElementById('annHistoryClose');
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && overlay.style.display === 'flex') close();
   });
 }
 
@@ -1825,6 +2170,20 @@ window.MCJS_ESCAPE_HTML = escapeHtml2;
   if (pmBtn) pmBtn.addEventListener('click', openPluginMarket);
   var peBtn = document.getElementById('pluginEditorBtn');
   if (peBtn) peBtn.addEventListener('click', openPluginEditor);
+  var helpBtn = document.getElementById('helpBtn');
+  if (helpBtn) helpBtn.addEventListener('click', function() {
+    var hm = document.getElementById('helpModal');
+    if (hm) hm.style.display = 'flex';
+  });
+  var helpClose = document.getElementById('helpCloseBtn');
+  if (helpClose) helpClose.addEventListener('click', function() {
+    var hm = document.getElementById('helpModal');
+    if (hm) hm.style.display = 'none';
+  });
+  var helpOverlay = document.getElementById('helpModal');
+  if (helpOverlay) helpOverlay.addEventListener('click', function(e) {
+    if (e.target === helpOverlay) helpOverlay.style.display = 'none';
+  });
   var heroMarket = document.getElementById('openPluginMarket');
   if (heroMarket) heroMarket.addEventListener('click', openPluginMarket);
   var heroDocs = document.getElementById('openPluginDocs');
@@ -2069,7 +2428,7 @@ function buildPluginDocsHTML() {
 
     '<section class="plugin-doc-section">',
     '<h3>远程加载 / 第三方市场</h3>',
-    '<p>MCJS v1.2 开放了插件加载链路,支持以下方式从远程安装插件:</p>',
+    '<p>MCJS v1.3 开放了插件加载链路,支持以下方式从远程安装插件:</p>',
     '<ol>',
     '<li><strong>添加第三方仓库</strong>:在远程仓库标签点击 "添加仓库",填入任何符合协议的 JSON manifest 地址。</li>',
     '<li><strong>URL 直接导入</strong>:在 "浏览" 标签底部粘贴 URL(GitHub raw、CDN、个人服务器),选择要安装的插件即可。</li>',

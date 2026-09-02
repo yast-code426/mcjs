@@ -1,4 +1,4 @@
-/* MCJS Plugin Market UI v1.0
+﻿/* MCJS Plugin Market UI v1.0
    - 插件市场前端逻辑
    - 浏览/安装/卸载/启用/禁用
    - 文档显示
@@ -240,7 +240,7 @@
         listEl.innerHTML =
           '<div class="empty-state">' +
           '<p>所有插件均为最新版本</p>' +
-          '<p style="margin-top:8px;font-size:0.85rem;">启动器 v1.2 · 插件市场版本 1.0</p>' +
+          '<p style="margin-top:8px;font-size:0.85rem;">启动器 v1.3 · 插件市场版本 1.0</p>' +
           '</div>';
         if (window.MCJS_TOAST) window.MCJS_TOAST('所有插件已是最新', 'success');
         return;

@@ -6,12 +6,41 @@
 (function() {
   'use strict';
 
+  /* 常用钩子点文档(用于 IDE 智能提示和文档生成) */
+  window.MCJS_HOOK_POINTS = [
+    { name: 'launch:version', desc: '启动游戏前,可修改版本配置', args: 'version', returns: 'version' },
+    { name: 'launch:mirrors', desc: '获取镜像列表前,可增删镜像', args: 'mirrors,version', returns: 'mirrors' },
+    { name: 'launch:html', desc: '游戏 HTML 加载前,可修改 HTML 内容(用于注入)', args: 'html,version,mirrorURL', returns: 'html' },
+    { name: 'launch:before', desc: '游戏启动前(用户已点击启动,但 iframe 还没创建)', args: 'version', returns: 'void' },
+    { name: 'launch:after', desc: '游戏启动后(iframe 内容已写入)', args: 'version,iframe', returns: 'void' },
+    { name: 'launch:failed', desc: '所有镜像都失败时', args: 'version,error', returns: 'void' },
+    { name: 'launch:cancel', desc: '用户取消启动时', args: 'version', returns: 'void' },
+    { name: 'game:close', desc: '关闭游戏时', args: 'version', returns: 'void' },
+    { name: 'settings:open', desc: '设置窗口打开时', args: 'settings', returns: 'settings' },
+    { name: 'settings:save', desc: '保存设置时', args: 'settings', returns: 'settings' },
+    { name: 'app:ready', desc: '启动器 DOM 加载完成时', args: 'void', returns: 'void' },
+    { name: 'app:render', desc: '版本卡片渲染后', args: 'container', returns: 'void' },
+    { name: 'mirror:fetch', desc: '拉取镜像前', args: 'url,version', returns: 'url' },
+    { name: 'mirror:success', desc: '拉取镜像成功', args: 'url,html,version', returns: 'html' },
+    { name: 'mirror:fail', desc: '拉取镜像失败', args: 'url,error,version', returns: 'void' }
+  ];
+
+  /* 常用事件名 */
+  window.MCJS_EVENT_NAMES = [
+    'app:ready', 'app:init',
+    'launch:start', 'launch:progress', 'launch:complete', 'launch:failed', 'launch:cancel',
+    'game:ready', 'game:close', 'game:error',
+    'settings:change', 'settings:save',
+    'plugin:install', 'plugin:uninstall', 'plugin:enable', 'plugin:disable',
+    'mirror:select', 'version:select'
+  ];
+
   if (window.MCJS_PLUGIN_API) return;
 
   /* ===== Hook System ===== */
   var _hooks = {}; // hookName -> [{pluginId, fn, priority}]
   var _validHookPoints = {};
-  window.MCJS_HOOK_POINTS.forEach(function(hp) { _validHookPoints[hp.name] = true; });
+  (window.MCJS_HOOK_POINTS || []).forEach(function(hp) { _validHookPoints[hp.name] = true; });
 
   function registerHook(name, pluginId, fn, priority) {
     if (typeof name !== 'string' || !name) { console.warn('[MCJS] registerHook: invalid hook name'); return; }
@@ -372,32 +401,4 @@
   window.MCJS_HOOKS = _hooks;
   window.MCJS_EVENTS = { on: on, emit: emit };
 
-  /* 常用钩子点文档(用于 IDE 智能提示和文档生成) */
-  window.MCJS_HOOK_POINTS = [
-    { name: 'launch:version', desc: '启动游戏前,可修改版本配置', args: 'version', returns: 'version' },
-    { name: 'launch:mirrors', desc: '获取镜像列表前,可增删镜像', args: 'mirrors,version', returns: 'mirrors' },
-    { name: 'launch:html', desc: '游戏 HTML 加载前,可修改 HTML 内容(用于注入)', args: 'html,version,mirrorURL', returns: 'html' },
-    { name: 'launch:before', desc: '游戏启动前(用户已点击启动,但 iframe 还没创建)', args: 'version', returns: 'void' },
-    { name: 'launch:after', desc: '游戏启动后(iframe 内容已写入)', args: 'version,iframe', returns: 'void' },
-    { name: 'launch:failed', desc: '所有镜像都失败时', args: 'version,error', returns: 'void' },
-    { name: 'launch:cancel', desc: '用户取消启动时', args: 'version', returns: 'void' },
-    { name: 'game:close', desc: '关闭游戏时', args: 'version', returns: 'void' },
-    { name: 'settings:open', desc: '设置窗口打开时', args: 'settings', returns: 'settings' },
-    { name: 'settings:save', desc: '保存设置时', args: 'settings', returns: 'settings' },
-    { name: 'app:ready', desc: '启动器 DOM 加载完成时', args: 'void', returns: 'void' },
-    { name: 'app:render', desc: '版本卡片渲染后', args: 'container', returns: 'void' },
-    { name: 'mirror:fetch', desc: '拉取镜像前', args: 'url,version', returns: 'url' },
-    { name: 'mirror:success', desc: '拉取镜像成功', args: 'url,html,version', returns: 'html' },
-    { name: 'mirror:fail', desc: '拉取镜像失败', args: 'url,error,version', returns: 'void' }
-  ];
-
-  /* 常用事件名 */
-  window.MCJS_EVENT_NAMES = [
-    'app:ready', 'app:init',
-    'launch:start', 'launch:progress', 'launch:complete', 'launch:failed', 'launch:cancel',
-    'game:ready', 'game:close', 'game:error',
-    'settings:change', 'settings:save',
-    'plugin:install', 'plugin:uninstall', 'plugin:enable', 'plugin:disable',
-    'mirror:select', 'version:select'
-  ];
 })();

@@ -2,7 +2,7 @@
 // 所有 Eaglercraft/MCJS 版本及镜像链接
 // 数据来源: https://mcjs.link/
 
-const MIRROR_BASES = [
+var MIRROR_BASES = [
   'https://play.mcjs.cc',
   'https://playmcjscc.pages.dev',
   'https://play.mcjs.144449.xyz',
@@ -19,7 +19,7 @@ const MIRROR_BASES = [
   'https://7.mcjslink.144449.xyz'
 ];
 
-const BETA_MIRROR_BASE = 'https://mcjs-beta.144449.xyz';
+var BETA_MIRROR_BASE = 'https://mcjs-beta.144449.xyz';
 
 function makeMirrors(path) {
   return MIRROR_BASES.map(function(base, i) {
@@ -33,7 +33,7 @@ function makeBetaMirrors(path, originUrl) {
   return mirrors;
 }
 
-const VERSIONS = [
+var VERSIONS = [
   // === MCJS 优化版（推荐） ===
   {
     id: '1.8.8',

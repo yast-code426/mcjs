@@ -1,4 +1,4 @@
-/* MCJS Plugin Registry v1.0
+﻿/* MCJS Plugin Registry v1.0
    - 插件注册表:安装/卸载/启用/禁用
    - 官方插件库(内置)
    - 加载/执行/沙箱
@@ -318,7 +318,7 @@
 
   /* ===== Built-in / Official Plugins =====
      这些插件"内置"在启动器中,默认全部禁用,需要用户从插件市场手动启用
-     这就是 v1.2 的核心改动:所有注入选项(包括原 WASM polyfill)都通过插件启用 */
+     这就是 v1.3 的核心改动:所有注入选项(包括原 WASM polyfill)都通过插件启用 */
 
   function builtinWasmPolyfill() {
     return {
@@ -1207,11 +1207,16 @@
       window.__MCJS_PLUGIN_INSTANCES__ = window.__MCJS_PLUGIN_INSTANCES__ || {};
       window.__MCJS_PLUGIN_INSTANCES__[plugin.id] = inst;
       if (plugin.hooks && inst && typeof inst.inject === 'function') {
-        plugin.hooks.forEach(function(hookName) {
-          API._internal.registerHook(hookName, plugin.id, function(args) {
-            return args;
-          }, 50);
-        });
+        var api = window.MCJS_PLUGIN_API;
+        if (!api || !api._internal) {
+          console.warn('[MCJS] Plugin API not ready, hooks not registered for', plugin.id);
+        } else {
+          plugin.hooks.forEach(function(hookName) {
+            api._internal.registerHook(hookName, plugin.id, function(args) {
+              return args;
+            }, 50);
+          });
+        }
       }
       console.log('[MCJS] Plugin activated:', plugin.id, '(hooks:', (plugin.hooks || []).join(', ') + ')');
     } catch (e) {
@@ -1220,7 +1225,10 @@
   }
 
   function _deactivatePlugin(id) {
-    API._internal.unregisterHooks(id);
+    var api = window.MCJS_PLUGIN_API;
+    if (api && api._internal) {
+      api._internal.unregisterHooks(id);
+    }
     delete _activePlugins[id];
     if (window.__MCJS_PLUGIN_INSTANCES__) delete window.__MCJS_PLUGIN_INSTANCES__[id];
   }

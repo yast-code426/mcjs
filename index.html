@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
-  <title>MCJS Launcher — Eaglercraft 全版本启动器 v1.2</title>
+  <title>MCJS Launcher — Eaglercraft 全版本启动器 v1.3.1</title>
   <meta name="description" content="MCJS 镜像站启动器 · 全版本网页版 Minecraft，本地运行，无需跳转 · 内置插件市场" />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
@@ -64,16 +64,33 @@
       <div class="header-inner">
         <div class="logo">
           <div class="logo-icon">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-              <rect x="2" y="2" width="28" height="28" rx="4" fill="#fff" opacity="0.9"/>
-              <rect x="8" y="8" width="6" height="6" fill="#22c55e"/>
-              <rect x="18" y="8" width="6" height="6" fill="#22c55e"/>
-              <rect x="8" y="18" width="16" height="6" fill="#22c55e"/>
+            <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+              <defs>
+                <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#22c55e"/>
+                  <stop offset="100%" stop-color="#16a34a"/>
+                </linearGradient>
+                <linearGradient id="logoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#1a1d26"/>
+                  <stop offset="100%" stop-color="#0f1117"/>
+                </linearGradient>
+              </defs>
+              <rect x="2" y="2" width="36" height="36" rx="8" fill="url(#logoBg)"/>
+              <rect x="2" y="2" width="36" height="36" rx="8" fill="none" stroke="#22c55e" stroke-width="1" opacity="0.3"/>
+              <rect x="8" y="8" width="7" height="7" rx="1" fill="url(#logoGrad)"/>
+              <rect x="17" y="8" width="7" height="7" rx="1" fill="url(#logoGrad)" opacity="0.85"/>
+              <rect x="26" y="8" width="7" height="7" rx="1" fill="url(#logoGrad)" opacity="0.7"/>
+              <rect x="8" y="17" width="7" height="7" rx="1" fill="url(#logoGrad)" opacity="0.8"/>
+              <rect x="17" y="17" width="7" height="7" rx="1" fill="url(#logoGrad)"/>
+              <rect x="26" y="17" width="7" height="7" rx="1" fill="url(#logoGrad)" opacity="0.6"/>
+              <rect x="8" y="26" width="7" height="7" rx="1" fill="url(#logoGrad)" opacity="0.5"/>
+              <rect x="17" y="26" width="7" height="7" rx="1" fill="url(#logoGrad)" opacity="0.7"/>
+              <rect x="26" y="26" width="7" height="7" rx="1" fill="url(#logoGrad)" opacity="0.4"/>
             </svg>
           </div>
           <div class="logo-text">
             <span class="logo-title">MCJS Launcher</span>
-            <span class="subtitle">Eaglercraft 全版本启动器 · v1.2</span>
+            <span class="subtitle">Eaglercraft 全版本启动器 · v1.3.1</span>
           </div>
         </div>
         <div class="header-actions">
@@ -98,6 +115,14 @@
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
             <span class="header-btn-label">设置</span>
+          </button>
+          <button class="header-btn" id="helpBtn" title="帮助 (Ctrl+?)" aria-label="帮助">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span class="header-btn-label">帮助</span>
           </button>
         </div>
       </div>
@@ -180,7 +205,7 @@
         </div>
         <div class="faq-item">
           <div class="faq-question">插件市场是什么？如何使用？</div>
-          <div class="faq-answer">插件市场是 MCJS v1.2 新增的功能中心。所有兼容性增强、注入代码、性能优化均通过 <span class="hl">插件</span> 实现。你可以从市场安装官方插件，或自己编写/导入第三方插件。详细文档请见 <span class="hl">插件开发文档</span>。</div>
+          <div class="faq-answer">插件市场是 MCJS v1.3 新增的功能中心。所有兼容性增强、注入代码、性能优化均通过 <span class="hl">插件</span> 实现。你可以从市场安装官方插件，或自己编写/导入第三方插件。详细文档请见 <span class="hl">插件开发文档</span>。</div>
         </div>
         <div class="faq-item">
           <div class="faq-question">多人游戏如何联机？</div>
@@ -202,9 +227,94 @@
     </main>
 
     <footer class="footer">
-      <p>MCJS Launcher 是基于 Eaglercraft 的社区启动器 · v1.2 内置插件市场</p>
+      <p>MCJS Launcher 是基于 Eaglercraft 的社区启动器 · v1.3.1 内置插件市场</p>
       <p>游戏文件来源于公共 CDN 镜像，与 Minecraft、Mojang 无任何从属关系</p>
     </footer>
+  </div>
+
+  <!-- 帮助弹窗 -->
+  <div class="modal-overlay" id="helpModal" style="display:none;">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <h2>帮助中心</h2>
+        <button class="modal-close" id="helpCloseBtn">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height:70vh; overflow-y:auto; padding:20px 24px;">
+        <div class="help-section">
+          <h3>快速开始</h3>
+          <ul>
+            <li>在首页选择想玩的 Minecraft 版本,点击"启动"按钮</li>
+            <li>首次启动会弹出镜像选择窗口,选择延迟最低的镜像</li>
+            <li>游戏加载完成后,点击画面即可进入游戏</li>
+            <li>全屏启动可在设置中开启,ESC 退出全屏不会退出游戏</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>版本分类说明</h3>
+          <ul>
+            <li><strong>MCJS 优化版（推荐）</strong> — 经过简体中文优化,支持联机,性能稳定</li>
+            <li><strong>模组整合包</strong> — 内置 Forge 模组,仅 WASM 版可用,仅支持英文</li>
+            <li><strong>最新测试版</strong> — 1.14+ 高版本,不稳定,需高性能电脑</li>
+            <li><strong>第三方客户端</strong> — 社区魔改版,非官方,可能含定制主题</li>
+            <li><strong>经典旧版</strong> — 早期版本搬运,仅供怀旧</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>JS 与 WASM 的区别</h3>
+          <ul>
+            <li><strong>JS 版</strong> — 传统 JavaScript 版本,兼容性好,文件较大</li>
+            <li><strong>WASM 版</strong> — WebAssembly 编译版,性能更高,文件更小,需现代浏览器</li>
+            <li>如果浏览器支持 WASM,优先选择 WASM 版本</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>联机方式</h3>
+          <ul>
+            <li><strong>单机</strong> — 所有版本均支持,无需网络</li>
+            <li><strong>局域网联机</strong> — 同一局域网内,1.8.8 和 1.12.2+ 支持</li>
+            <li><strong>远程联机</strong> — 跨网络联机,1.8.8 和 1.12.2+ 支持,需搭建中继服务器</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>插件系统</h3>
+          <ul>
+            <li>点击顶部"插件"按钮进入插件市场</li>
+            <li>支持安装、启用、禁用、卸载插件</li>
+            <li>点击"编写"按钮可自行编写插件并测试</li>
+            <li>插件可通过钩子注入游戏 HTML、CSS、JS</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>设置说明</h3>
+          <ul>
+            <li><strong>启动</strong> — 镜像选择、全屏、快速启动等</li>
+            <li><strong>性能</strong> — 内存分配、GPU 偏好、内存优化</li>
+            <li><strong>存储</strong> — 存档隔离、缓存管理</li>
+            <li><strong>外观</strong> — 背景、字体、卡片密度</li>
+            <li><strong>工程调试</strong> — 调试模式、详细日志、禁用缓存、FPS 浮层、测试模式</li>
+            <li><strong>浏览器信息</strong> — 检测并复制浏览器环境信息,用于问题反馈</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>常见问题</h3>
+          <ul>
+            <li><strong>游戏打不开?</strong> — 尝试更换镜像,关闭全屏启动,或清除缓存</li>
+            <li><strong>游戏卡顿?</strong> — 使用 WASM 版本,调低内存上限,关闭其他标签页</li>
+            <li><strong>插件无法禁用?</strong> — 已在 v1.3 修复,请清除 localStorage 后重试</li>
+            <li><strong>存档丢失?</strong> — 开启存档隔离,定期手动备份</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>快捷键</h3>
+          <ul>
+            <li><strong>Ctrl + ,</strong> — 打开设置</li>
+            <li><strong>Ctrl + /</strong> — 聚焦搜索框</li>
+            <li><strong>Ctrl + ?</strong> — 打开帮助</li>
+            <li><strong>ESC</strong> — 关闭弹窗</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 更新公告弹窗 -->
@@ -212,21 +322,13 @@
     <div class="modal modal-announce">
       <div class="announce-header">
         <h2>更新公告</h2>
-        <span class="announce-version">v1.2</span>
+        <span class="announce-version" id="announceVersionTag">v1.3.1</span>
       </div>
       <div class="announce-body" id="announceBody">
-        <div class="announce-content">
-          <h3>MCJS Launcher v1.2 更新内容</h3>
-          <ul>
-            <li><strong>新增镜像站</strong>：从 6 个扩展到 14 个，新增 7 个 mcjslink 镜像站</li>
-            <li><strong>新增版本</strong>：1.14.4 WASM、1.20.6 WASM、26.2 WASM</li>
-            <li><strong>新增第三方客户端</strong>：PixelClient（1.8.8/1.12.2 JS+WASM）、TuffClient（1.12.2 JS+WASM）</li>
-            <li><strong>版本更新</strong>：1.12.2/1.12.2WASM 热更新至 u3，支持中文翻译和联机</li>
-            <li><strong>版本更新</strong>：1.16.5 更新至 u3 beta，26.1.2 标识为 WebGL2</li>
-            <li><strong>插件系统修复</strong>：修复钩子重复注入 Bug，增强钩子检测和输入校验</li>
-            <li><strong>UI 修复</strong>：修复特性标签替换顺序、事件重复绑定、CSS 重复定义等问题</li>
-          </ul>
+        <div class="announce-content" id="announceContent">
+          <p style="color:var(--text-muted);">正在加载公告…</p>
         </div>
+        <button class="announce-history-link" id="announceHistoryLink" type="button">查看历代所有公告 →</button>
       </div>
       <div class="announce-footer">
         <span class="announce-timer" id="announceTimer">请阅读 3 秒后可关闭…</span>
@@ -234,6 +336,19 @@
           <button class="announce-btn announce-btn-today" id="announceCloseToday" disabled>今日不再显示</button>
           <button class="announce-btn announce-btn-forever" id="announceCloseForever" disabled>永久关闭</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 历代公告弹窗 -->
+  <div class="modal-overlay" id="annHistoryModal" style="display:none;">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <h2>历代更新公告</h2>
+        <button class="modal-close" id="annHistoryClose" aria-label="关闭">&times;</button>
+      </div>
+      <div class="modal-body ann-history-body" id="annHistoryBody" style="max-height:70vh; overflow-y:auto; padding:20px 24px;">
+        <p style="color:var(--text-muted);">正在加载…</p>
       </div>
     </div>
   </div>
@@ -449,8 +564,10 @@
   <!-- Toast 通知 -->
   <div class="toast-container" id="toastContainer"></div>
 
+  <script src="js/compat.js"></script>
   <script src="js/versions.js"></script>
   <script src="js/game.js"></script>
+  <script src="js/announcements.js"></script>
   <script src="js/plugin-api.js"></script>
   <script src="js/plugin-registry.js"></script>
   <script src="js/plugin-market.js"></script>

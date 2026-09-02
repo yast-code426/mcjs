@@ -667,26 +667,155 @@ function manualOptimizeMemory(onProgress, onComplete) {
 }
 
 /* ========== Game File Fetcher ========== */
-function fetchGameHTML(mirrorURL){
-  return fetch(mirrorURL,{
-    mode:'cors',
-    credentials:'omit',
-    redirect:'follow'
-  }).then(function(r){
+/* XHR 兜底请求(无 AbortController 的老浏览器也能超时中断) */
+function xhrFetch(url, timeoutMs){
+  return new Promise(function(resolve, reject){
+    try{
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.responseType = 'text';
+      xhr.timeout = timeoutMs;
+      xhr.onload = function(){
+        resolve({
+          status: xhr.status,
+          ok: xhr.status >= 200 && xhr.status < 300,
+          text: function(){ return Promise.resolve(xhr.responseText); },
+          headers: { get: function(){ return null; } }
+        });
+      };
+      xhr.onerror = function(){ reject(new Error('NETWORK_ERROR')); };
+      xhr.ontimeout = function(){ reject(new Error('FETCH_TIMEOUT')); };
+      xhr.send();
+    }catch(e){ reject(e); }
+  });
+}
+
+/* 带超时的 fetch(AbortController 优先;老浏览器走 XHR 兜底,保证可超时) */
+function fetchWithTimeout(url, timeoutMs){
+  // 老浏览器无 fetch 或无 AbortController:用 XHR 兜底,原生支持 timeout
+  if (typeof fetch !== 'function' || typeof AbortController === 'undefined') {
+    if (typeof XMLHttpRequest !== 'undefined') {
+      return xhrFetch(url, timeoutMs);
+    }
+    // 实在没有 XHR,只能直接 fetch
+    return fetch(url, { mode:'cors', credentials:'omit', redirect:'follow' });
+  }
+  var opts = { mode:'cors', credentials:'omit', redirect:'follow' };
+  var controller = new AbortController();
+  opts.signal = controller.signal;
+  var timer = setTimeout(function(){
+    try { controller.abort(); } catch(e) {}
+  }, timeoutMs);
+  return fetch(url, opts).then(function(r){
+    clearTimeout(timer);
+    return r;
+  }, function(err){
+    clearTimeout(timer);
+    if (controller.signal && controller.signal.aborted) {
+      throw new Error('FETCH_TIMEOUT');
+    }
+    throw err;
+  });
+}
+
+/* 校验拉取到的内容是否为有效游戏 HTML */
+function validateGameHTML(html){
+  if(!html||html.length<300){
+    throw new Error('EMPTY_PAGE');
+  }
+  if(html.indexOf('<html')===-1&&html.indexOf('<HTML')===-1&&
+     html.indexOf('<head')===-1&&html.indexOf('<HEAD')===-1&&
+     html.indexOf('<body')===-1&&html.indexOf('<BODY')===-1){
+    throw new Error('NOT_HTML');
+  }
+  return html;
+}
+
+function fetchGameHTML(mirrorURL, timeoutMs){
+  var t = timeoutMs || 15000;
+  return fetchWithTimeout(mirrorURL, t).then(function(r){
     if(r.status<200||r.status>=300){
       throw new Error('HTTP '+r.status);
     }
     return r.text();
-  }).then(function(html){
-    if(!html||html.length<300){
-      throw new Error('EMPTY_PAGE');
+  }).then(validateGameHTML);
+}
+
+/* 并发竞速拉取:同时发起多个镜像请求,第一个成功的胜出,其余忽略。
+   用于"自动选择"或首个镜像超时时快速切换,弱网下显著降低等待时间。 */
+function fetchGameHTMLRacing(urls, timeoutMs){
+  return new Promise(function(resolve, reject){
+    if(!urls || urls.length === 0){ reject(new Error('NO_MIRRORS')); return; }
+    var t = timeoutMs || 15000;
+    var pending = urls.length;
+    var lastErr = null;
+    var settled = false;
+    var controllers = [];
+    function abortAll(except){
+      for(var i=0;i<controllers.length;i++){
+        if(controllers[i] && controllers[i] !== except && controllers[i].abort){
+          try { controllers[i].abort(); } catch(e) {}
+        }
+      }
     }
-    if(html.indexOf('<html')===-1&&html.indexOf('<HTML')===-1&&
-       html.indexOf('<head')===-1&&html.indexOf('<HEAD')===-1&&
-       html.indexOf('<body')===-1&&html.indexOf('<BODY')===-1){
-      throw new Error('NOT_HTML');
-    }
-    return html;
+    urls.forEach(function(u){
+      var opts = { mode:'cors', credentials:'omit', redirect:'follow' };
+      var controller = null;
+      if (typeof AbortController !== 'undefined') {
+        controller = new AbortController();
+        controllers.push(controller);
+        opts.signal = controller.signal;
+      }
+      var timer = setTimeout(function(){
+        if(controller){ try{ controller.abort(); }catch(e){} }
+      }, t);
+      fetch(u, opts).then(function(r){
+        clearTimeout(timer);
+        if(settled) { try{ if(controller) controller.abort(); }catch(e){} return; }
+        if(r.status<200||r.status>=300){ throw new Error('HTTP '+r.status); }
+        return r.text();
+      }).then(function(html){
+        if(settled) return null;
+        return validateGameHTML(html);
+      }).then(function(valid){
+        if(settled || valid == null) return;
+        settled = true;
+        abortAll(controller);
+        resolve({ html: valid, url: u });
+      }).catch(function(err){
+        clearTimeout(timer);
+        lastErr = err;
+        pending--;
+        if(pending <= 0 && !settled){
+          settled = true;
+          reject(lastErr || new Error('ALL_MIRRORS_FAILED'));
+        }
+      });
+    });
+  });
+}
+
+/* 轻量镜像测速:用 HEAD/小请求测量可达性与延迟(ms),失败返回 null */
+function pingMirror(mirrorURL, timeoutMs){
+  return new Promise(function(resolve){
+    var t = timeoutMs || 6000;
+    var start = (window.performance && performance.now) ? performance.now() : Date.now();
+    var done = false;
+    function finish(val){ if(done) return; done = true; resolve(val); }
+    var timer = setTimeout(function(){ finish(null); }, t);
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var opts = { mode:'cors', credentials:'omit', redirect:'follow', method:'GET' };
+    if(controller) opts.signal = controller.signal;
+    fetch(mirrorURL, opts).then(function(r){
+      clearTimeout(timer);
+      var ms = Math.round(((window.performance && performance.now) ? performance.now() : Date.now()) - start);
+      if(controller){ try{ controller.abort(); }catch(e){} }
+      if(r.status >= 200 && r.status < 500) finish({ latency: ms, status: r.status });
+      else finish(null);
+    }).catch(function(){
+      clearTimeout(timer);
+      finish(null);
+    });
   });
 }
 
@@ -819,6 +948,18 @@ function buildHostJS(){
     '    if(cvTries>240)clearInterval(cvIv);',
     '  },250);',
     '  setTimeout(function(){if(!overlayShown)hideLoader();},60000);',
+    '  var fsExitTime=0;',
+    '  document.addEventListener("fullscreenchange",function(){',
+    '    if(!document.fullscreenElement){fsExitTime=Date.now();}',
+    '  });',
+    '  document.addEventListener("webkitfullscreenchange",function(){',
+    '    if(!document.webkitFullscreenElement){fsExitTime=Date.now();}',
+    '  });',
+    '  window.addEventListener("keydown",function(e){',
+    '    if(e.keyCode===27&&fsExitTime&&Date.now()-fsExitTime<500){',
+    '      e.preventDefault();e.stopPropagation();',
+    '    }',
+    '  },true);',
     '})();'
   ].join('');
 }
@@ -934,7 +1075,7 @@ var currentIframe=null;
 var currentBlobURL=null;
 var lastLaunchedVersion=null;
 
-function launchGame(version,onProgress,onReady,onError){
+function launchGame(version,onProgress,onReady,onError,autoMode){
   var settings=window.MCJS_SETTINGS;
   var mirrorIdx = settings.mirrorIndex;
   if(mirrorIdx < 0 || mirrorIdx >= version.mirrors.length) {
@@ -992,10 +1133,39 @@ function launchGame(version,onProgress,onReady,onError){
         loadGameInFrame(version,cached,mirrorURL,onProgress,onReady,onError);
         return;
       }
-      try{onProgress('正在从 '+rawMirror.name+' 下载游戏文件...',40);}catch(e){}
+      // ===== 自动模式:并发竞速拉取多个镜像,最快可用者胜出(弱网优化) =====
+      var raceWinner = null;
+      var racePromise = null;
+      if(autoMode === true && Array.isArray(version.mirrors) && version.mirrors.length > 1){
+        var raceURLs = [];
+        // 首选镜像 + 最多 3 个备用镜像(避免过多并发)
+        var order = [mirrorIdx];
+        var altCount = 0;
+        for(var mi=0; mi<version.mirrors.length && altCount<3; mi++){
+          if(mi===mirrorIdx) continue;
+          order.push(mi); altCount++;
+        }
+        for(var oi=0; oi<order.length; oi++){
+          var u = buildMirrorURL(version.mirrors[order[oi]], version);
+          if(u) raceURLs.push(u);
+        }
+        try{onProgress('正在智能选择最快镜像...',40);}catch(e){}
+        racePromise = fetchGameHTMLRacing(raceURLs, 15000).then(function(res){
+          raceWinner = res;
+          try{onProgress('已选择最快镜像,下载游戏文件...',60);}catch(e){}
+          return res.html;
+        });
+      } else {
+        try{onProgress('正在从 '+rawMirror.name+' 下载游戏文件...',40);}catch(e){}
+        racePromise = fetchGameHTML(mirrorURL).then(function(html){
+          raceWinner = { html: html, url: mirrorURL };
+          return html;
+        });
+      }
 
-      fetchGameHTML(mirrorURL).then(function(rawHtml){
+      racePromise.then(function(rawHtml){
         try{onProgress('解压游戏源代码...',65);}catch(e){}
+        if(raceWinner && raceWinner.url){ mirrorURL = raceWinner.url; window.MCJS_LAUNCH_CONTEXT = { version: version, mirrorURL: mirrorURL, startedAt: Date.now() }; }
         // ========== 插件 hook:launch:html - 允许插件修改游戏 HTML ==========
         var html = rawHtml;
         if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
@@ -1086,35 +1256,37 @@ function tryFallbackMirror(version,startIndex,onProgress,onReady,onError,lastErr
     return;
   }
 
-  var tried=0;
-  function tryNext(){
-    if(tried>=mirrors.length-1){
-      giveUpAllMirrors(version,onError,lastErr);
-      return;
-    }
-    var idx=(startIndex+tried)%mirrors.length;
-    tried++;
-    if(idx===alreadyTried){tryNext();return;}
-    var mirror=mirrors[idx];
-    var mirrorURL=buildMirrorURL(mirror,version);
-    try{onProgress('切换到 '+mirror.name+'...',40+Math.min(tried*10,40));}catch(e){}
-    fetchGameHTML(mirrorURL).then(function(html){
-      var scripts=[];
-      var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(window.MCJS_SETTINGS.memoryLimit)+';';
-      scripts.push(memCode);
-      if(window.MCJS_SETTINGS.saveIsolation){
-        var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
-        scripts.push(saveCode);
-      }
-      var modifiedHTML=injectIntoHTML(html,scripts,mirrorURL);
-      cacheGameFiles(version.id,modifiedHTML,mirrorURL).catch(function(){});
-      loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady,onError);
-    }).catch(function(err){
-      console.warn('[MCJS] Mirror '+mirror.name+' failed:',err);
-      tryNext();
-    });
+  // 收集未尝试过的镜像 URL,并发竞速,最快可用者胜出
+  var candidateURLs = [];
+  var candidateMirrors = [];
+  for(var k=0; k<mirrors.length; k++){
+    if(k===alreadyTried) continue;
+    var u = buildMirrorURL(mirrors[k], version);
+    if(u){ candidateURLs.push(u); candidateMirrors.push({ mirror: mirrors[k], url: u }); }
   }
-  tryNext();
+  if(candidateURLs.length === 0){
+    giveUpAllMirrors(version,onError,lastErr);
+    return;
+  }
+  try{onProgress('正在尝试其他镜像(并发竞速)...',50);}catch(e){}
+  fetchGameHTMLRacing(candidateURLs, 15000).then(function(res){
+    var winURL = res.url;
+    var html = res.html;
+    var scripts=[];
+    var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(window.MCJS_SETTINGS.memoryLimit)+';';
+    scripts.push(memCode);
+    if(window.MCJS_SETTINGS.saveIsolation){
+      var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
+      scripts.push(saveCode);
+    }
+    var pluginInjects = collectPluginInjects('launch:html', { version: version, mirrorURL: winURL });
+    var modifiedHTML=injectIntoHTML(html,scripts,winURL,pluginInjects);
+    cacheGameFiles(version.id,modifiedHTML,winURL).catch(function(){});
+    loadGameInFrame(version,modifiedHTML,winURL,onProgress,onReady,onError);
+  }).catch(function(err){
+    console.warn('[MCJS] All fallback mirrors failed:',err);
+    giveUpAllMirrors(version,onError,err||lastErr);
+  });
 }
 
 function giveUpAllMirrors(version,onError,lastErr){
@@ -1306,6 +1478,8 @@ window.MCJS_GAME={
   detectWasmSupport:detectWasmSupport,
   needsWasmFallback:needsWasmFallback,
   buildWasmPolyfillScript:buildWasmPolyfillScript,
+  pingMirror:pingMirror,
+  fetchGameHTMLRacing:fetchGameHTMLRacing,
   manualOptimize: manualOptimizeMemory,
   optimizeMemory: optimizeMemory
 };

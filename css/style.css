@@ -712,6 +712,14 @@ body.density-spacious { --card-gap:20px; --card-padding:24px 26px 18px; }
 }
 .announce-btn-forever:not(:disabled):hover { filter: brightness(1.08); }
 
+/* ===== 帮助弹窗 ===== */
+.help-section { margin-bottom: 20px; }
+.help-section h3 { font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin: 0 0 8px; padding-bottom: 4px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+.help-section ul { list-style: none; padding: 0; margin: 0; }
+.help-section li { font-size: 0.87rem; line-height: 1.65; color: var(--text-secondary); padding: 3px 0 3px 16px; position: relative; }
+.help-section li::before { content: ''; position: absolute; left: 4px; top: 12px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent-green); }
+.help-section strong { color: var(--text-primary); font-weight: 600; }
+
 /* ===== 模态框通用 (毛玻璃) ===== */
 .modal-overlay {
   position: fixed; inset: 0;
@@ -1372,3 +1380,59 @@ body.density-spacious { --card-gap:20px; --card-padding:24px 26px 18px; }
   .plugin-search input { width: 100%; }
   .plugin-toolbar { flex-direction: column; align-items: stretch; }
 }
+
+/* ========== 公告条目(动态渲染 + 历代历史) ========== */
+.ann-entry { padding: 14px 16px; background: var(--bg-detail, rgba(0,0,0,0.025)); border-radius: 10px; margin-bottom: 12px; }
+.ann-entry-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.ann-entry-version { font-family: var(--font-mono, monospace); font-size: 0.8rem; font-weight: 700; color: var(--accent-green, #22c55e); }
+.ann-entry-date { font-family: var(--font-mono, monospace); font-size: 0.72rem; color: var(--text-faint, #a8adb8); }
+.ann-entry-title { font-size: 0.98rem; font-weight: 700; margin: 0 0 8px; color: var(--text-primary); }
+.ann-entry-list { list-style: none; padding: 0; margin: 0; }
+.ann-entry-list li { font-size: 0.84rem; color: var(--text-secondary); line-height: 1.6; padding: 4px 0; }
+.ann-entry-list li strong { color: var(--text-primary); font-weight: 600; }
+.ann-entry-divider { height: 1px; background: var(--border-soft, rgba(0,0,0,0.06)); margin: 12px 0; }
+.ann-tag {
+  display: inline-block; min-width: 36px; text-align: center;
+  font-size: 0.68rem; font-weight: 700; border-radius: 4px;
+  padding: 1px 7px; margin-right: 8px; vertical-align: 1px;
+}
+.ann-tag-new { background: rgba(34,197,94,0.15); color: #16a34a; }
+.ann-tag-fix { background: rgba(239,68,68,0.12); color: #ef4444; }
+.ann-tag-opt { background: rgba(59,130,246,0.12); color: #3b82f6; }
+.ann-tag-other { background: rgba(0,0,0,0.07); color: var(--text-muted, #7c818f); }
+.announce-history-link {
+  display: block; width: 100%; margin-top: 14px;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--accent-blue, #3b82f6); font-size: 0.84rem; font-weight: 600;
+  font-family: inherit; padding: 6px 0; text-align: center;
+}
+.announce-history-link:hover { text-decoration: underline; }
+.ann-history-body .ann-entry:last-child { margin-bottom: 0; }
+
+/* ========== 镜像测速 ========== */
+.mirror-speed-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 0 6px; flex-wrap: wrap;
+}
+.mirror-speed-btn {
+  background: var(--accent-blue-bg, rgba(59,130,246,0.1));
+  color: var(--accent-blue, #3b82f6);
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: 8px; padding: 6px 14px;
+  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  font-family: inherit; transition: all 0.2s ease;
+}
+.mirror-speed-btn:hover:not(:disabled) { background: var(--accent-blue, #3b82f6); color: #fff; }
+.mirror-speed-btn:disabled { opacity: 0.6; cursor: wait; }
+.mirror-speed-hint { font-size: 0.76rem; color: var(--text-muted, #7c818f); }
+.mirror-item-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mirror-ping {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.74rem; font-weight: 600;
+  padding: 2px 8px; border-radius: 6px;
+  background: rgba(0,0,0,0.05); color: var(--text-muted, #7c818f);
+  white-space: nowrap; flex-shrink: 0;
+}
+.mirror-ping.ping-good { background: rgba(34,197,94,0.13); color: #16a34a; }
+.mirror-ping.ping-mid { background: rgba(245,158,11,0.14); color: #d97706; }
+.mirror-ping.ping-bad { background: rgba(239,68,68,0.12); color: #ef4444; }
