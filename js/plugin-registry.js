@@ -318,7 +318,7 @@
 
   /* ===== Built-in / Official Plugins =====
      这些插件"内置"在启动器中,默认全部禁用,需要用户从插件市场手动启用
-     这就是 v1.3 的核心改动:所有注入选项(包括原 WASM polyfill)都通过插件启用 */
+     这就是 v1.4 的核心改动:所有注入选项(包括原 WASM polyfill)都通过插件启用 */
 
   function builtinWasmPolyfill() {
     return {

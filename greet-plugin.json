@@ -1,0 +1,15 @@
+{
+  "id": "example.greet-plugin",
+  "name": "问候语插件",
+  "version": "1.0.0",
+  "author": "Example Author",
+  "category": "utility",
+  "description": "在游戏页面顶部显示一条欢迎横幅(示例)",
+  "icon": "👋",
+  "longDescription": "这是一个完整的远程插件示例,演示如何发布一个 MCJS 第三方插件。它会在游戏页面的左上角显示一条绿色横幅。",
+  "hooks": ["launch:after"],
+  "permissions": ["game.modify"],
+  "code": "(function(){\n  if (window.__MCJS_EXAMPLE_GREET__) return;\n  window.__MCJS_EXAMPLE_GREET__ = true;\n  console.log('[Example] Greet plugin loaded');\n  var div = document.createElement('div');\n  div.textContent = '👋 欢迎使用 MCJS 启动器!';\n  div.style.cssText = 'position:fixed;top:8px;left:8px;background:#22c55e;color:#fff;padding:6px 12px;border-radius:6px;font:13px sans-serif;z-index:99999;box-shadow:0 2px 8px rgba(0,0,0,0.15);';\n  document.body.appendChild(div);\n})();\n",
+  "signatureType": "sha256",
+  "signature": "0000000000000000000000000000000000000000000000000000000000000000"
+}

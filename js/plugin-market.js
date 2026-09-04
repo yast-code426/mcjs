@@ -64,7 +64,7 @@
     var installed = Registry.isInstalled(plugin.id);
     var enabled = Registry.isEnabled(plugin.id);
     var card = el(
-      '<div class="plugin-card" data-id="' + escapeHtml(plugin.id) + '">' +
+      '<div class="plugin-card" data-id="' + escapeHtml(plugin.id) + '" data-category="' + escapeHtml(plugin.category || 'custom') + '">' +
         '<div class="plugin-card-header">' +
           '<div class="plugin-icon ' + escapeHtml(plugin.category) + '">' + categoryTag(plugin.category) + '</div>' +
           '<div class="plugin-info">' +
@@ -89,7 +89,9 @@
               : '<button class="plugin-btn small primary" data-act="enable">启用</button>'
           ) : (
             installed
-              ? '<button class="plugin-btn small" data-act="disable">' + (enabled ? '禁用' : '已安装') + '</button>' +
+              ? (enabled
+                  ? '<button class="plugin-btn small" data-act="disable">禁用</button>'
+                  : '<button class="plugin-btn small primary" data-act="enable">启用</button>') +
                 '<button class="plugin-btn small danger" data-act="uninstall">卸载</button>'
               : '<button class="plugin-btn small primary" data-act="install">安装</button>'
           )) +
@@ -202,13 +204,13 @@
     if (!listEl) return;
     listEl.innerHTML = '';
     var plugins = Registry.list().filter(function(p) {
-      return Registry.isEnabled(p.id);
+      return Registry.isInstalled(p.id);
     });
     if (plugins.length === 0) {
       listEl.innerHTML =
         '<div class="empty-state">' +
-        '<p>还没有启用任何插件</p>' +
-        '<p style="margin-top:8px;font-size:0.85rem;">前往"浏览"标签安装并启用插件</p>' +
+        '<p>还没有安装任何插件</p>' +
+        '<p style="margin-top:8px;font-size:0.85rem;">前往"浏览"标签安装插件</p>' +
         '</div>';
       return;
     }
@@ -234,13 +236,15 @@
   function checkAllUpdatesUI() {
     if (window.MCJS_TOAST) window.MCJS_TOAST('正在检查所有更新...', 'info');
     Registry.checkAllUpdates().then(function(updates) {
+      _updatesCache = updates || [];
+      renderTabCounts();
       var listEl = document.getElementById('updatesPluginList');
       if (!listEl) return;
       if (!updates || updates.length === 0) {
         listEl.innerHTML =
           '<div class="empty-state">' +
           '<p>所有插件均为最新版本</p>' +
-          '<p style="margin-top:8px;font-size:0.85rem;">启动器 v1.3 · 插件市场版本 1.0</p>' +
+          '<p style="margin-top:8px;font-size:0.85rem;">启动器 v1.4 · 插件市场版本 1.0</p>' +
           '</div>';
         if (window.MCJS_TOAST) window.MCJS_TOAST('所有插件已是最新', 'success');
         return;
@@ -266,6 +270,7 @@
           if (window.MCJS_TOAST) window.MCJS_TOAST('正在更新 ' + u.name + '...', 'info');
           Registry.update(u.id).then(function() {
             if (window.MCJS_TOAST) window.MCJS_TOAST(u.name + ' 已更新到 v' + u.latest, 'success');
+            refreshUpdateCounts();
             renderAll();
           }).catch(function(e) {
             if (window.MCJS_TOAST) window.MCJS_TOAST('更新失败: ' + e.message, 'error');
@@ -572,6 +577,42 @@
   function renderAll() {
     renderCategories();
     renderActivePane();
+    renderTabCounts();
+  }
+
+  // tab 计数徽章：已安装数 / 可更新数（更新数异步刷新）
+  var _updatesCache = [];
+  function renderTabCounts() {
+    var modal = document.getElementById('pluginMarketModal');
+    if (!modal) return;
+    function setCount(tabName, n) {
+      var tab = modal.querySelector('.plugin-tab[data-tab="' + tabName + '"]');
+      if (!tab) return;
+      var badge = tab.querySelector('.tab-count');
+      if (!n || n <= 0) {
+        if (badge) badge.remove();
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'tab-count';
+        tab.appendChild(badge);
+      }
+      badge.textContent = n > 99 ? '99+' : String(n);
+    }
+    var installedCount = 0;
+    try {
+      installedCount = Registry.list().filter(function(p) { return Registry.isInstalled(p.id); }).length;
+    } catch (e) {}
+    setCount('installed', installedCount);
+    setCount('updates', _updatesCache.length);
+  }
+  function refreshUpdateCounts() {
+    if (!Registry.checkAllUpdates) return;
+    Registry.checkAllUpdates().then(function(updates) {
+      _updatesCache = updates || [];
+      renderTabCounts();
+    }).catch(function() {});
   }
 
   /* ===== Modal: Open / Close ===== */
@@ -579,6 +620,7 @@
     var modal = document.getElementById('pluginMarketModal');
     if (!modal) return;
     renderAll();
+    refreshUpdateCounts();
     modal.classList.add('active');
   }
   function close() {

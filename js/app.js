@@ -16,22 +16,38 @@ var launchContent = document.getElementById('launchContent');
 /* ========== State ========== */
 // 确保 settings 有完整的默认值
 var DEFAULT_APP_SETTINGS = {
+  // 启动
   mirrorIndex: 0,
+  fullscreenLaunch: false,
+  quickLaunch: false,
+  popupLaunch: false,
+  loadingDetail: true,
+  enginePrefer: 'auto',        // auto | wasm | js —— 默认引擎偏好
+  confirmLaunch: true,         // 启动/关闭危险操作前二次确认
+  // 性能
   memoryLimit: 512,
   autoClean: true,
-  saveIsolation: true,
   gpuPrefer: 'high-performance',
+  // 存储
+  saveIsolation: true,
   cacheSizeLimit: 2048,
+  saveReminder: true,          // 定期提醒备份存档
+  // 外观
+  theme: 'light',              // light | dark | system
+  accentColor: 'green',        // green | blue | purple | orange | pink
   bgImage: true,
-  soundEnabled: true,
-  fullscreenLaunch: false,
+  glassBlur: true,             // 毛玻璃效果开关
+  reduceMotion: false,
   fontSize: 'normal',
   cardDensity: 'comfortable',
+  // 音效与辅助
+  soundEnabled: true,
+  soundVolume: 70,             // 0~100 界面音量(百分比)
   autoUpdateCheck: true,
-  loadingDetail: true,
-  quickLaunch: false,
-  reduceMotion: false,
-  popupLaunch: false,
+  showAnnouncements: true,     // 启动时显示更新公告
+  // 插件
+  pluginAutoCheck: true,       // 启动时检查插件更新
+  // 工程调试
   debugMode: false,
   verboseLog: false,
   disableCache: false,
@@ -60,11 +76,9 @@ var searchDebounceTimer = null;
 var sound = null;
 var currentVersion = null;
 var isLaunching = false;
-var settingsWindow = null;
 var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
             (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 var isPageRestored = false;
-var settingsOpening = false;
 
 /* ========== iOS 页面状态管理 ========== */
 var STATE_KEY = 'mcjs_session_state';
@@ -176,6 +190,7 @@ window.addEventListener('pageshow', function(e) {
 var SoundManager = function(){
   this.ctx = null;
   this.enabled = true;
+  this.volume = 0.7;
   this.unlocked = false;
   this._initAndUnlock();
 };
@@ -218,8 +233,9 @@ SoundManager.prototype._tone = function(freq, duration, type, volume){
     var gain = this.ctx.createGain();
     osc.type = type || 'sine';
     osc.frequency.setValueAtTime(freq, t);
+    var v = (volume || 0.08) * (this.volume == null ? 0.7 : this.volume);
     gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(volume || 0.08, t + 0.01);
+    gain.gain.linearRampToValueAtTime(v, t + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
@@ -255,6 +271,11 @@ SoundManager.prototype.launch = function(){
 };
 SoundManager.prototype.error = function(){ if(!this.enabled) return; this._tone(220, 0.18, 'sawtooth', 0.06); };
 SoundManager.prototype.setEnabled = function(on){ this.enabled = !!on; };
+SoundManager.prototype.setVolume = function(v){
+  v = parseFloat(v);
+  if (isNaN(v)) v = 0.7;
+  this.volume = Math.max(0, Math.min(1, v));
+};
 
 /* ========== Rendering ========== */
 function escapeHtml2(str){
@@ -549,6 +570,7 @@ function launchVersion(id){
   if(!versions) return;
   var ver = versions.find(function(v){ return v.id === id; });
   if(!ver) return;
+  ver = resolveEngineVersion(ver);
   currentVersion = ver;
   if (settings.quickLaunch === true) {
     startGameLaunch(ver);
@@ -900,659 +922,864 @@ document.getElementById('downloadCancelBtn').addEventListener('click', function(
 });
 
 /* ============================================================
-   ===== 设置窗口 =====
+   ===== 设置窗口（v1.5 站内模态版） =====
    ============================================================ */
 
 var settingsBtn = document.getElementById('settingsBtn');
+var settingsModalEl = document.getElementById('settingsModal');
+var settingsDraft = null;
+var settingsDirty = false;
+var settingsCacheTimer = null;
+var _systemDarkMql = null;
 
-function buildSettingsHTML() {
-  var s = window.MCJS_SETTINGS || {};
-  // 确保 s 有默认值
-  s = ensureSettingsDefaults(s);
-  function toggleChecked(val) { return val !== false ? 'active' : ''; }
-  function toggleAria(val) { return val !== false ? 'true' : 'false'; }
-
-  return '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n' +
-    '<meta charset="UTF-8">\n' +
-    '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
-    '<title>MCJS Launcher — 设置</title>\n' +
-    '<style>\n' +
-    ':root {\n' +
-    '  --bg-page: #f0f2f5;\n' +
-    '  --bg-card: rgba(255, 255, 255, 0.60);\n' +
-    '  --bg-detail: rgba(0, 0, 0, 0.03);\n' +
-    '  --border-base: rgba(255, 255, 255, 0.35);\n' +
-    '  --border-soft: rgba(255, 255, 255, 0.20);\n' +
-    '  --border-strong: rgba(255, 255, 255, 0.50);\n' +
-    '  --text-primary: #1a1d26;\n' +
-    '  --text-secondary: #4a4f5e;\n' +
-    '  --text-muted: #7c818f;\n' +
-    '  --text-faint: #a8adb8;\n' +
-    '  --accent-green: #22c55e;\n' +
-    '  --accent-green-bg: rgba(34, 197, 94, 0.10);\n' +
-    '  --accent-green-strong: #16a34a;\n' +
-    '  --accent-red: #ef4444;\n' +
-    '  --accent-red-bg: rgba(239, 68, 68, 0.10);\n' +
-    '  --accent-blue: #3b82f6;\n' +
-    '  --accent-blue-bg: rgba(59, 130, 246, 0.10);\n' +
-    '  --radius: 12px;\n' +
-    '  --radius-sm: 8px;\n' +
-    '  --radius-xs: 6px;\n' +
-    '  --font-base: 16px;\n' +
-    '  --font-display: "Sora", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;\n' +
-    '  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;\n' +
-    '  --font-mono: "JetBrains Mono", "Fira Code", monospace;\n' +
-    '  --transition: 0.2s ease;\n' +
-    '  --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.02);\n' +
-    '}\n' +
-    '* { margin:0; padding:0; box-sizing:border-box; }\n' +
-    'html { font-family: var(--font-body); font-size: var(--font-base); color: var(--text-primary); background: var(--bg-page); -webkit-font-smoothing: antialiased; line-height: 1.6; min-height: 100vh; }\n' +
-    'body { min-height: 100vh; display:flex; align-items:center; justify-content:center; padding:20px; background: var(--bg-page); background-image: radial-gradient(ellipse at 20% 0%, rgba(34,197,94,0.06) 0%, transparent 50%), radial-gradient(ellipse at 80% 100%, rgba(139,92,246,0.04) 0%, transparent 50%); background-attachment: fixed; }\n' +
-    '.settings-window { width:100%; max-width:540px; max-height:90vh; background: rgba(255,255,255,0.55); backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%); border-radius: var(--radius); border: 1px solid var(--border-base); box-shadow: 0 25px 70px rgba(0,0,0,0.10); display:flex; flex-direction:column; overflow:hidden; }\n' +
-    '.settings-header { display:flex; align-items:center; justify-content:space-between; padding:18px 24px; border-bottom:1px solid var(--border-base); flex-shrink:0; }\n' +
-    '.settings-header h2 { font-family:var(--font-display); font-size:1.15rem; font-weight:700; color:var(--text-primary); }\n' +
-    '.settings-close { background:transparent; border:none; font-size:1.6rem; color:var(--text-muted); cursor:pointer; width:32px; height:32px; border-radius:6px; transition:var(--transition); line-height:1; }\n' +
-    '.settings-close:hover { background:var(--bg-detail); color:var(--text-primary); }\n' +
-    '.settings-body { flex:1; overflow-y:auto; padding:18px 24px 24px; }\n' +
-    '.settings-group { margin-bottom:22px; }\n' +
-    '.settings-group-title { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--accent-green); margin-bottom:8px; padding-left:2px; }\n' +
-    '.setting-item { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-top:1px solid var(--border-soft); gap:12px; }\n' +
-    '.setting-item:first-child { border-top:none; }\n' +
-    '.setting-label span { font-size:0.92rem; font-weight:500; color:var(--text-primary); display:block; }\n' +
-    '.setting-label small { font-size:0.75rem; color:var(--text-muted); display:block; margin-top:1px; }\n' +
-    '.setting-control { flex-shrink:0; }\n' +
-    '.setting-select { padding:5px 10px; background:var(--bg-detail); border:1px solid var(--border-base); border-radius:6px; color:var(--text-primary); font-family:inherit; font-size:0.85rem; cursor:pointer; outline:none; }\n' +
-    '.setting-select:focus { border-color:var(--accent-green); }\n' +
-    '.setting-slider { display:flex; align-items:center; gap:10px; }\n' +
-    '.setting-slider input[type="range"] { width:110px; accent-color:var(--accent-green); cursor:pointer; }\n' +
-    '.slider-value { font-size:0.78rem; color:var(--text-secondary); font-family:var(--font-mono); min-width:56px; text-align:right; }\n' +
-    '.toggle { position:relative; display:inline-block; width:38px; height:22px; background:var(--border-strong); border:none; border-radius:999px; cursor:pointer; transition:var(--transition); flex-shrink:0; padding:0; }\n' +
-    '.toggle::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; background:#fff; border-radius:50%; transition:var(--transition); box-shadow:0 1px 3px rgba(0,0,0,0.15); }\n' +
-    '.toggle.active { background:var(--accent-green); }\n' +
-    '.toggle.active::after { left:18px; }\n' +
-    '.settings-actions { display:flex; gap:10px; padding-top:16px; border-top:1px solid var(--border-soft); margin-top:4px; }\n' +
-    '.settings-actions .btn { flex:1; padding:10px 0; border-radius:8px; border:none; font-family:inherit; font-size:0.9rem; font-weight:600; cursor:pointer; transition:var(--transition); }\n' +
-    '.btn-primary { background:var(--accent-green); color:#fff; }\n' +
-    '.btn-primary:hover { background:var(--accent-green-strong); }\n' +
-    '.btn-secondary { background:var(--bg-detail); color:var(--text-primary); border:1px solid var(--border-soft); }\n' +
-    '.btn-secondary:hover { background:rgba(0,0,0,0.06); }\n' +
-    '.cache-info { margin-top:10px; padding:10px 14px; background:var(--bg-detail); border-radius:var(--radius-sm); font-size:0.82rem; }\n' +
-    '.cache-info-row { display:flex; justify-content:space-between; padding:2px 0; color:var(--text-secondary); }\n' +
-    '.cache-info-row strong { color:var(--text-primary); font-weight:600; font-family:var(--font-mono); }\n' +
-    '.action-btn { display:block; width:100%; padding:8px 0; margin-top:6px; background:var(--bg-detail); color:var(--text-primary); border:1px solid var(--border-soft); border-radius:6px; cursor:pointer; font-family:inherit; font-size:0.82rem; font-weight:500; transition:var(--transition); }\n' +
-    '.action-btn:hover { background:rgba(0,0,0,0.06); }\n' +
-    '.action-btn.danger { color:var(--accent-red); }\n' +
-    '.action-btn.danger:hover { background:var(--accent-red-bg); border-color:rgba(239,68,68,0.3); }\n' +
-    '.manual-opt-btn { display:block; width:100%; padding:10px 14px; margin-top:8px; background:var(--accent-blue-bg); color:var(--accent-blue); border:1px solid rgba(59,130,246,0.25); border-radius:8px; cursor:pointer; font-family:inherit; font-size:0.88rem; font-weight:600; transition:var(--transition); text-align:center; }\n' +
-    '.manual-opt-btn:hover { background:var(--accent-blue); color:#fff; border-color:var(--accent-blue); box-shadow:0 2px 12px rgba(59,130,246,0.25); }\n' +
-    '.manual-opt-btn:disabled { opacity:0.5; cursor:not-allowed; pointer-events:none; }\n' +
-    '.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--accent-green); color:#fff; padding:10px 24px; border-radius:8px; font-weight:500; font-size:0.9rem; box-shadow:0 4px 16px rgba(34,197,94,0.30); opacity:0; transition:opacity 0.3s; pointer-events:none; z-index:999; }\n' +
-    '.toast.show { opacity:1; }\n' +
-    '.toast.error { background:var(--accent-red); box-shadow:0 4px 16px rgba(239,68,68,0.30); }\n' +
-    '@media (max-width:480px) { .settings-window { max-height:100vh; border-radius:0; max-width:100%; } .settings-body { padding:14px 16px 20px; } .settings-header { padding:14px 16px; } }\n' +
-    '.ann-history { margin-top:10px; max-height:0; overflow:hidden; transition:max-height 0.35s ease; }\n' +
-    '.ann-history.open { max-height: 460px; overflow-y:auto; }\n' +
-    '.ann-entry { padding:10px 12px; background:var(--bg-detail); border-radius:var(--radius-sm); margin-bottom:10px; }\n' +
-    '.ann-entry-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }\n' +
-    '.ann-entry-version { font-family:var(--font-mono); font-size:0.78rem; font-weight:700; color:var(--accent-green); }\n' +
-    '.ann-entry-date { font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint); }\n' +
-    '.ann-entry-title { font-size:0.9rem; font-weight:700; color:var(--text-primary); margin-bottom:6px; }\n' +
-    '.ann-entry-list { list-style:none; margin:0; padding:0; }\n' +
-    '.ann-entry-list li { font-size:0.8rem; color:var(--text-secondary); line-height:1.55; padding:3px 0; }\n' +
-    '.ann-entry-list li strong { color:var(--text-primary); }\n' +
-    '.ann-tag { display:inline-block; min-width:34px; text-align:center; font-size:0.68rem; font-weight:700; border-radius:4px; padding:1px 6px; margin-right:6px; }\n' +
-    '.ann-tag-new { background:rgba(34,197,94,0.15); color:var(--accent-green-strong); }\n' +
-    '.ann-tag-fix { background:rgba(239,68,68,0.12); color:var(--accent-red); }\n' +
-    '.ann-tag-opt { background:rgba(59,130,246,0.12); color:var(--accent-blue); }\n' +
-    '.ann-tag-other { background:rgba(0,0,0,0.08); color:var(--text-muted); }\n' +
-    '.ann-entry-divider { height:1px; background:var(--border-soft); margin:10px 0; }\n' +
-    '</style>\n' +
-    '</head>\n<body>\n' +
-    '<div class="settings-window">\n' +
-    '  <div class="settings-header">\n' +
-    '    <h2>启动器设置</h2>\n' +
-    '    <button class="settings-close" id="settingsCloseBtn" title="关闭">&times;</button>\n' +
-    '  </div>\n' +
-    '  <div class="settings-body" id="settingsBody">\n' +
-
-    '    <div class="settings-group">\n' +
-    '      <div class="settings-group-title">启动</div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>默认镜像</span><small>选择首选的游戏文件源</small></div>\n' +
-    '        <div class="setting-control">\n' +
-    '          <select class="setting-select" id="settingMirror">\n' +
-    '            <option value="0"' + (s.mirrorIndex === 0 ? ' selected' : '') + '>主站 (pages.dev)</option>\n' +
-    '            <option value="1"' + (s.mirrorIndex === 1 ? ' selected' : '') + '>镜像 1 (144449.xyz)</option>\n' +
-    '            <option value="2"' + (s.mirrorIndex === 2 ? ' selected' : '') + '>镜像 2 (IPv6)</option>\n' +
-    '            <option value="3"' + (s.mirrorIndex === 3 ? ' selected' : '') + '>镜像 3 (mirror)</option>\n' +
-    '            <option value="4"' + (s.mirrorIndex === 4 ? ' selected' : '') + '>镜像 4 (mirror-test)</option>\n' +
-    '            <option value="5"' + (s.mirrorIndex === 5 ? ' selected' : '') + '>镜像 5 (备用)</option>\n' +
-    '          </select>\n' +
-    '        </div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>全屏启动</span><small>启动游戏后自动进入全屏模式</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.fullscreenLaunch) + '" id="settingFullscreen" type="button" role="switch" aria-checked="' + toggleAria(s.fullscreenLaunch) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>快速启动</span><small>跳过镜像选择直接启动</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.quickLaunch) + '" id="settingQuickLaunch" type="button" role="switch" aria-checked="' + toggleAria(s.quickLaunch) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>弹窗启动</span><small>在新窗口中启动游戏</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.popupLaunch) + '" id="settingPopupLaunch" type="button" role="switch" aria-checked="' + toggleAria(s.popupLaunch) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>加载详情</span><small>显示详细的加载步骤信息</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.loadingDetail) + '" id="settingLoadingDetail" type="button" role="switch" aria-checked="' + toggleAria(s.loadingDetail) + '"></button></div>\n' +
-    '      </div>\n' +
-    '    </div>\n' +
-
-    '    <div class="settings-group">\n' +
-    '      <div class="settings-group-title">性能</div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>内存分配上限</span><small>游戏可使用的最大内存</small></div>\n' +
-    '        <div class="setting-control">\n' +
-    '          <div class="setting-slider">\n' +
-    '            <input type="range" id="settingMemory" min="256" max="4096" step="128" value="' + (s.memoryLimit || 512) + '" />\n' +
-    '            <span class="slider-value" id="memoryValue">' + (s.memoryLimit || 512) + ' MB</span>\n' +
-    '          </div>\n' +
-    '        </div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>启动前内存优化</span><small>启动游戏前自动清理内存</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.autoClean) + '" id="settingAutoClean" type="button"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>GPU 偏好</span><small>选择图形处理器模式</small></div>\n' +
-    '        <div class="setting-control">\n' +
-    '          <select class="setting-select" id="settingGPU">\n' +
-    '            <option value="high-performance"' + (s.gpuPrefer === 'high-performance' ? ' selected' : '') + '>高性能独立显卡</option>\n' +
-    '            <option value="default"' + (s.gpuPrefer === 'default' ? ' selected' : '') + '>默认</option>\n' +
-    '            <option value="low-power"' + (s.gpuPrefer === 'low-power' ? ' selected' : '') + '>节能模式</option>\n' +
-    '          </select>\n' +
-    '        </div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item" style="border-top:1px solid var(--border-soft); padding-top:12px; margin-top:4px; flex-direction:column; align-items:stretch;">\n' +
-    '        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">\n' +
-    '          <div class="setting-label"><span>手动内存优化</span><small>立即执行内存释放和垃圾回收</small></div>\n' +
-    '        </div>\n' +
-    '        <button class="manual-opt-btn" id="manualOptBtn" style="width:100%; margin-top:6px;">执行优化</button>\n' +
-    '        <div id="manualOptStatus" style="font-size:0.78rem; color:var(--text-muted); margin-top:4px; text-align:center;"></div>\n' +
-    '      </div>\n' +
-    '    </div>\n' +
-
-    '    <div class="settings-group">\n' +
-    '      <div class="settings-group-title">存储</div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>存档隔离</span><small>每个版本使用独立的存档空间</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.saveIsolation) + '" id="settingSaveIsolation" type="button" role="switch" aria-checked="' + toggleAria(s.saveIsolation) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>缓存上限</span><small>游戏文件本地缓存大小限制</small></div>\n' +
-    '        <div class="setting-control">\n' +
-    '          <div class="setting-slider">\n' +
-    '            <input type="range" id="settingCacheLimit" min="512" max="8192" step="256" value="' + (s.cacheSizeLimit || 2048) + '" />\n' +
-    '            <span class="slider-value" id="cacheValue">' + (s.cacheSizeLimit || 2048) + ' MB</span>\n' +
-    '          </div>\n' +
-    '        </div>\n' +
-    '      </div>\n' +
-    '      <div class="cache-info" id="cacheInfo">\n' +
-    '        <div class="cache-info-row"><span>已用缓存</span><strong id="cacheSizeText">读取中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>缓存文件</span><strong id="cacheFileCount">读取中…</strong></div>\n' +
-    '      </div>\n' +
-    '      <button class="action-btn" id="clearCacheBtn">清除游戏缓存</button>\n' +
-    '      <button class="action-btn danger" id="clearSaveBtn" style="margin-top:4px;">清除所有存档</button>\n' +
-    '    </div>\n' +
-
-    '    <div class="settings-group">\n' +
-    '      <div class="settings-group-title">外观</div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>背景图片</span><small>显示 Minecraft 风景背景</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.bgImage) + '" id="settingBgImage" type="button" role="switch" aria-checked="' + toggleAria(s.bgImage) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>减少动态效果</span><small>关闭动画和过渡效果</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.reduceMotion) + '" id="settingReduceMotion" type="button" role="switch" aria-checked="' + toggleAria(s.reduceMotion) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>字体大小</span><small>调整界面文字大小</small></div>\n' +
-    '        <div class="setting-control">\n' +
-    '          <select class="setting-select" id="settingFontSize">\n' +
-    '            <option value="small"' + (s.fontSize === 'small' ? ' selected' : '') + '>小</option>\n' +
-    '            <option value="normal"' + (s.fontSize === 'normal' || !s.fontSize ? ' selected' : '') + '>正常</option>\n' +
-    '            <option value="large"' + (s.fontSize === 'large' ? ' selected' : '') + '>大</option>\n' +
-    '            <option value="xlarge"' + (s.fontSize === 'xlarge' ? ' selected' : '') + '>特大</option>\n' +
-    '          </select>\n' +
-    '        </div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>卡片密度</span><small>版本卡片的间距和大小</small></div>\n' +
-    '        <div class="setting-control">\n' +
-    '          <select class="setting-select" id="settingCardDensity">\n' +
-    '            <option value="compact"' + (s.cardDensity === 'compact' ? ' selected' : '') + '>紧凑</option>\n' +
-    '            <option value="comfortable"' + (s.cardDensity === 'comfortable' || !s.cardDensity ? ' selected' : '') + '>舒适</option>\n' +
-    '            <option value="spacious"' + (s.cardDensity === 'spacious' ? ' selected' : '') + '>宽松</option>\n' +
-    '          </select>\n' +
-    '        </div>\n' +
-    '      </div>\n' +
-    '    </div>\n' +
-
-    '    <div class="settings-group">\n' +
-    '      <div class="settings-group-title">工程调试</div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>调试模式</span><small>显示详细错误信息和调用栈</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.debugMode) + '" id="settingDebugMode" type="button" role="switch" aria-checked="' + toggleAria(s.debugMode) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>详细日志</span><small>输出所有加载步骤和钩子调用日志</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.verboseLog) + '" id="settingVerboseLog" type="button" role="switch" aria-checked="' + toggleAria(s.verboseLog) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>禁用缓存</span><small>每次启动重新下载游戏文件（测试用）</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.disableCache) + '" id="settingDisableCache" type="button" role="switch" aria-checked="' + toggleAria(s.disableCache) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>调试浮层</span><small>在游戏画面上显示 FPS 和性能信息</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.showDebugOverlay) + '" id="settingShowDebugOverlay" type="button" role="switch" aria-checked="' + toggleAria(s.showDebugOverlay) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>测试模式</span><small>使用测试镜像和未发布版本</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.testMode) + '" id="settingTestMode" type="button" role="switch" aria-checked="' + toggleAria(s.testMode) + '"></button></div>\n' +
-    '      </div>\n' +
-    '    </div>\n' +
-    '\n' +
-    '    <div class="settings-group">\n' +
-    '      <div class="settings-group-title">浏览器信息</div>\n' +
-    '      <div class="cache-info" id="browserInfo" style="font-family:var(--font-mono); font-size:0.78rem;">\n' +
-    '        <div class="cache-info-row"><span>浏览器</span><strong id="biBrowser">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>内核</span><strong id="biEngine">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>操作系统</span><strong id="biOS">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>平台</span><strong id="biPlatform">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>屏幕分辨率</span><strong id="biScreen">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>CPU 核心</span><strong id="biCores">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>内存</span><strong id="biMem">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>语言</span><strong id="biLang">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>触摸支持</span><strong id="biTouch">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>WebAssembly</span><strong id="biWasm">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>WebGL</span><strong id="biWebGL">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>WebGL2</span><strong id="biWebGL2">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>GPU</span><strong id="biGPU">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>Cookie</span><strong id="biCookie">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>在线状态</span><strong id="biOnline">检测中…</strong></div>\n' +
-    '        <div class="cache-info-row"><span>User Agent</span><strong id="biUA" style="word-break:break-all; font-size:0.7rem; line-height:1.4;">检测中…</strong></div>\n' +
-    '      </div>\n' +
-    '      <button class="action-btn" id="copyBrowserInfoBtn" style="margin-top:6px;">复制浏览器信息</button>\n' +
-    '    </div>\n' +
-    '\n' +
-    '    <div class="settings-group">\n' +
-    '      <div class="settings-group-title">音效与辅助</div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>音效</span><small>启动器界面音效</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.soundEnabled) + '" id="settingSound" type="button" role="switch" aria-checked="' + toggleAria(s.soundEnabled) + '"></button></div>\n' +
-    '      </div>\n' +
-    '      <div class="setting-item">\n' +
-    '        <div class="setting-label"><span>自动检查更新</span><small>启动时检查启动器更新</small></div>\n' +
-    '        <div class="setting-control"><button class="toggle ' + toggleChecked(s.autoUpdateCheck) + '" id="settingAutoUpdateCheck" type="button" role="switch" aria-checked="' + toggleAria(s.autoUpdateCheck) + '"></button></div>\n' +
-    '      </div>\n' +
-    '    </div>\n' +
-
-    '    <div class="settings-group">\n' +
-    '      <div class="settings-group-title">更新公告</div>\n' +
-    '      <div class="setting-item" style="border-top:none;">\n' +
-    '        <div class="setting-label"><span>历史公告</span><small>查看启动器历代全部更新公告</small></div>\n' +
-    '        <div class="setting-control"><button class="action-btn" id="openAnnHistoryBtn" style="margin-top:0; white-space:nowrap; padding:6px 14px;">查看公告</button></div>\n' +
-    '      </div>\n' +
-    '      <div class="ann-history" id="annHistoryBox"></div>\n' +
-    '    </div>\n' +
-    '\n' +
-    '    <div class="settings-actions">\n' +
-    '      <button class="btn btn-secondary" id="settingsCancelBtn">取消</button>\n' +
-    '      <button class="btn btn-primary" id="settingsSaveBtn">保存设置</button>\n' +
-    '    </div>\n' +
-    '  </div>\n' +
-    '</div>\n' +
-    '<div class="toast" id="toast"></div>\n' +
-
-    '<script>\n' +
-    '(function() {\n' +
-    '  var settings = {};\n' +
-    '  try { var stored = localStorage.getItem("mcjs_settings"); settings = stored ? JSON.parse(stored) : {}; } catch(e) {}\n' +
-    '  var defaults = { mirrorIndex:0, memoryLimit:512, autoClean:true, saveIsolation:true, gpuPrefer:"high-performance", cacheSizeLimit:2048, bgImage:true, soundEnabled:true, fullscreenLaunch:false, fontSize:"normal", cardDensity:"comfortable", autoUpdateCheck:true, loadingDetail:true, quickLaunch:false, reduceMotion:false, popupLaunch:false, debugMode:false, verboseLog:false, disableCache:false, showDebugOverlay:false, testMode:false };\n' +
-    '  Object.keys(defaults).forEach(function(k){ if(settings[k]===undefined) settings[k]=defaults[k]; });\n' +
-    '  var dirty = false;\n' +
-    '  var toastTimer = null;\n' +
-    '  function showToast(msg, isError) { var el=document.getElementById("toast"); if(!el)return; el.textContent=msg; el.className="toast show"+(isError?" error":""); if(toastTimer)clearTimeout(toastTimer); toastTimer=setTimeout(function(){ el.className="toast"; }, 2500); }\n' +
-    '  function getToggle(el){ return el && el.classList.contains("active"); }\n' +
-    '  function setToggle(el, on){ if(!el)return; if(on) el.classList.add("active"); else el.classList.remove("active"); el.setAttribute("aria-checked", on?"true":"false"); }\n' +
-    '  function bindToggle(id, key){ var el=document.getElementById(id); if(!el)return; setToggle(el, settings[key]!==false); el.addEventListener("click", function(){ var next=!getToggle(el); setToggle(el, next); settings[key]=next; dirty=true; }); }\n' +
-    '  function bindSelect(id, key){ var el=document.getElementById(id); if(!el)return; el.addEventListener("change", function(){ settings[key]=el.value; dirty=true; }); }\n' +
-    '  function bindSlider(id, valueId, key, unit){ var el=document.getElementById(id); var valEl=document.getElementById(valueId); if(!el||!valEl)return; el.addEventListener("input", function(){ var v=parseInt(el.value); valEl.textContent=v+" "+unit; settings[key]=v; dirty=true; }); }\n' +
-    '  bindToggle("settingFullscreen", "fullscreenLaunch");\n' +
-    '  bindToggle("settingQuickLaunch", "quickLaunch");\n' +
-    '  bindToggle("settingPopupLaunch", "popupLaunch");\n' +
-    '  bindToggle("settingLoadingDetail", "loadingDetail");\n' +
-    '  bindToggle("settingAutoClean", "autoClean");\n' +
-    '  bindToggle("settingSaveIsolation", "saveIsolation");\n' +
-    '  bindToggle("settingBgImage", "bgImage");\n' +
-    '  bindToggle("settingReduceMotion", "reduceMotion");\n' +
-    '  bindToggle("settingSound", "soundEnabled");\n' +
-    '  bindToggle("settingAutoUpdateCheck", "autoUpdateCheck");\n' +
-    '  bindToggle("settingDebugMode", "debugMode");\n' +
-    '  bindToggle("settingVerboseLog", "verboseLog");\n' +
-    '  bindToggle("settingDisableCache", "disableCache");\n' +
-    '  bindToggle("settingShowDebugOverlay", "showDebugOverlay");\n' +
-    '  bindToggle("settingTestMode", "testMode");\n' +
-    '  bindSelect("settingMirror", "mirrorIndex");\n' +
-    '  bindSelect("settingGPU", "gpuPrefer");\n' +
-    '  bindSelect("settingFontSize", "fontSize");\n' +
-    '  bindSelect("settingCardDensity", "cardDensity");\n' +
-    '  bindSlider("settingMemory", "memoryValue", "memoryLimit", "MB");\n' +
-    '  bindSlider("settingCacheLimit", "cacheValue", "cacheSizeLimit", "MB");\n' +
-    '  \n' +
-    '  function requestCacheInfo() {\n' +
-    '    if (window.opener) {\n' +
-    '      window.opener.postMessage({ type: "get-cache-info" }, "*");\n' +
-    '    }\n' +
-    '  }\n' +
-    '  \n' +
-    '  var cacheInfoTimer = null;\n' +
-    '  \n' +
-    '  window.addEventListener("message", function(e) {\n' +
-    '    if (e.data && e.data.type === "cache-info-response") {\n' +
-    '      var sizeEl = document.getElementById("cacheSizeText");\n' +
-    '      var countEl = document.getElementById("cacheFileCount");\n' +
-    '      if (sizeEl) sizeEl.textContent = e.data.sizeText || "0 B";\n' +
-    '      if (countEl) countEl.textContent = (e.data.count !== undefined && e.data.count !== null) ? e.data.count + " 个文件" : "0 个文件";\n' +
-    '    }\n' +
-    '  });\n' +
-    '  \n' +
-    '  function doRequestCacheInfo() {\n' +
-    '    if (window.opener) {\n' +
-    '      try { window.opener.postMessage({ type: "get-cache-info" }, "*"); } catch(e) {}\n' +
-    '    }\n' +
-    '  }\n' +
-    '  \n' +
-    '  doRequestCacheInfo();\n' +
-    '  if (cacheInfoTimer) clearInterval(cacheInfoTimer);\n' +
-    '  cacheInfoTimer = setInterval(doRequestCacheInfo, 3000);\n' +
-    '  \n' +
-    '  function detectBrowserInfo() {\n' +
-    '    var ua = navigator.userAgent || "";\n' +
-    '    var browser = "未知", engine = "未知";\n' +
-    '    if (/Edg\\/(\\d+)/.test(ua)) { browser = "Edge " + RegExp.$1; engine = "Blink"; }\n' +
-    '    else if (/OPR\\/(\\d+)/.test(ua)) { browser = "Opera " + RegExp.$1; engine = "Blink"; }\n' +
-    '    else if (/Chrome\\/(\\d+)/.test(ua)) { browser = "Chrome " + RegExp.$1; engine = "Blink"; }\n' +
-    '    else if (/Firefox\\/(\\d+)/.test(ua)) { browser = "Firefox " + RegExp.$1; engine = "Gecko"; }\n' +
-    '    else if (/Safari\\/(\\d+)/.test(ua)) { browser = "Safari " + RegExp.$1; engine = "WebKit"; }\n' +
-    '    var os = "未知";\n' +
-    '    if (/Windows NT 10/.test(ua)) os = "Windows 10/11";\n' +
-    '    else if (/Windows NT 6\.3/.test(ua)) os = "Windows 8.1";\n' +
-    '    else if (/Windows NT 6\.1/.test(ua)) os = "Windows 7";\n' +
-    '    else if (/Mac OS X ([\d_]+)/.test(ua)) os = "macOS " + RegExp.$1.replace(/_/g, ".");\n' +
-    '    else if (/Android (\\d+)/.test(ua)) os = "Android " + RegExp.$1;\n' +
-    '    else if (/iPhone OS (\\d+)/.test(ua)) os = "iOS " + RegExp.$1;\n' +
-    '    else if (/Linux/.test(ua)) os = "Linux";\n' +
-    '    var platform = navigator.platform || "未知";\n' +
-    '    var screen = (window.screen ? window.screen.width + " x " + window.screen.height : "未知") + " @ " + (window.devicePixelRatio || 1) + "x";\n' +
-    '    var cores = navigator.hardwareConcurrency || "未知";\n' +
-    '    var mem = navigator.deviceMemory ? navigator.deviceMemory + " GB" : "未知";\n' +
-    '    var lang = navigator.language || "未知";\n' +
-    '    var touch = ("ontouchstart" in window) ? "支持" : "不支持";\n' +
-    '    var wasm = (typeof WebAssembly !== "undefined") ? "支持" : "不支持";\n' +
-    '    var webgl = "不支持", webgl2 = "不支持", gpu = "未知";\n' +
-    '    try {\n' +
-    '      var c = document.createElement("canvas").getContext("webgl");\n' +
-    '      if (c) { webgl = "支持"; var dbg = c.getExtension("WEBGL_debug_renderer_info"); if (dbg) gpu = c.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "未知"; }\n' +
-    '    } catch(e) {}\n' +
-    '    try {\n' +
-    '      var c2 = document.createElement("canvas").getContext("webgl2");\n' +
-    '      if (c2) webgl2 = "支持";\n' +
-    '    } catch(e) {}\n' +
-    '    var cookie = navigator.cookieEnabled ? "启用" : "禁用";\n' +
-    '    var online = navigator.onLine ? "在线" : "离线";\n' +
-    '    var set = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };\n' +
-    '    set("biBrowser", browser); set("biEngine", engine); set("biOS", os);\n' +
-    '    set("biPlatform", platform); set("biScreen", screen); set("biCores", cores);\n' +
-    '    set("biMem", mem); set("biLang", lang); set("biTouch", touch);\n' +
-    '    set("biWasm", wasm); set("biWebGL", webgl); set("biWebGL2", webgl2);\n' +
-    '    set("biGPU", gpu); set("biCookie", cookie); set("biOnline", online);\n' +
-    '    set("biUA", ua);\n' +
-    '    window._mcjsBrowserInfo = { browser:browser, engine:engine, os:os, platform:platform, screen:screen, cores:cores, mem:mem, lang:lang, touch:touch, wasm:wasm, webgl:webgl, webgl2:webgl2, gpu:gpu, cookie:cookie, online:online, ua:ua };\n' +
-    '  }\n' +
-    '  detectBrowserInfo();\n' +
-'  \n' +
-'  // ===== 历代更新公告 =====\n' +
-'  (function(){\n' +
-'    var box = document.getElementById("annHistoryBox");\n' +
-'    var btn = document.getElementById("openAnnHistoryBtn");\n' +
-'    function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }\n' +
-'    function tagCls(t){ if(t==="修复")return "ann-tag-fix"; if(t==="新增"||t==="首发")return "ann-tag-new"; if(t==="优化")return "ann-tag-opt"; return "ann-tag-other"; }\n' +
-'    function renderList(list){\n' +
-'      var html = "";\n' +
-'      for(var i=0;i<list.length;i++){ var a=list[i]; var items="";\n' +
-'        var arr=a.items||[];\n' +
-'        for(var j=0;j<arr.length;j++){ var it=arr[j]; items += "<li><span class=\\"ann-tag "+tagCls(it.tag)+"\\">"+esc(it.tag)+"</span>"+it.text+"</li>"; }\n' +
-'        html += "<div class=\\"ann-entry\\"><div class=\\"ann-entry-head\\"><span class=\\"ann-entry-version\\">"+esc(a.version)+"</span>"+(a.date?"<span class=\\"ann-entry-date\\">"+esc(a.date)+"</span>":"")+"</div><h3 class=\\"ann-entry-title\\">"+esc(a.title)+"</h3><ul class=\\"ann-entry-list\\">"+items+"</ul></div>";\n' +
-'        if(i<list.length-1) html += "<div class=\\"ann-entry-divider\\"></div>";\n' +
-'      }\n' +
-'      return html;\n' +
-'    }\n' +
-'    function getList(){\n' +
-'      try { if(window.opener && window.opener.MCJS_GET_ALL_ANNOUNCEMENTS){ return window.opener.MCJS_GET_ALL_ANNOUNCEMENTS(); } } catch(e){}\n' +
-'      try { if(window.MCJS_GET_ALL_ANNOUNCEMENTS){ return window.MCJS_GET_ALL_ANNOUNCEMENTS(); } } catch(e){}\n' +
-'      return [{ version:"v1.3.1", date:"2026-09-02", title:"更新公告", items:[{tag:"提示",text:"无法获取公告列表,请在主页面查看。"}] }];\n' +
-'    }\n' +
-'    var rendered = false;\n' +
-'    if(btn){ btn.addEventListener("click", function(){\n' +
-'      if(!box) return;\n' +
-'      if(!rendered){ box.innerHTML = renderList(getList()); rendered = true; }\n' +
-'      box.classList.toggle("open");\n' +
-'      btn.textContent = box.classList.contains("open") ? "收起公告" : "查看公告";\n' +
-'    }); }\n' +
-'  })();\n' +
-    '  var copyBtn = document.getElementById("copyBrowserInfoBtn");\n' +
-    '  if (copyBtn) copyBtn.addEventListener("click", function() {\n' +
-    '    var info = window._mcjsBrowserInfo || {};\n' +
-    '    var text = Object.keys(info).map(function(k){ return k + ": " + info[k]; }).join("\\n");\n' +
-    '    try { navigator.clipboard.writeText(text).then(function(){ showToast("已复制到剪贴板"); }).catch(function(){ showToast("复制失败", true); }); }\n' +
-    '    catch(e) { showToast("复制失败", true); }\n' +
-    '  });\n' +
-    '  \n' +
-    '  function saveAndClose() {\n' +
-    '    try {\n' +
-    '      localStorage.setItem("mcjs_settings", JSON.stringify(settings));\n' +
-    '      dirty = false;\n' +
-    '      showToast("设置已保存");\n' +
-    '      if (window.opener) {\n' +
-    '        try { window.opener.postMessage({ type: "settings-updated", settings: settings }, "*"); } catch(e) {}\n' +
-    '      }\n' +
-    '      setTimeout(function() { window.close(); }, 500);\n' +
-    '    } catch(e) {\n' +
-    '      showToast("保存失败: " + e.message, true);\n' +
-    '    }\n' +
-    '  }\n' +
-    '  document.getElementById("settingsSaveBtn").addEventListener("click", saveAndClose);\n' +
-    '  document.getElementById("settingsCancelBtn").addEventListener("click", function(){\n' +
-    '    if(dirty && !confirm("有未保存的更改，确定要关闭吗？")) return;\n' +
-    '    window.close();\n' +
-    '  });\n' +
-    '  document.getElementById("settingsCloseBtn").addEventListener("click", function(){\n' +
-    '    if(dirty && !confirm("有未保存的更改，确定要关闭吗？")) return;\n' +
-    '    window.close();\n' +
-    '  });\n' +
-    '  window.addEventListener("keydown", function(e){\n' +
-    '    if(e.key === "Escape"){\n' +
-    '      if(dirty && !confirm("有未保存的更改，确定要关闭吗？")) return;\n' +
-    '      window.close();\n' +
-    '    }\n' +
-    '    if((e.ctrlKey||e.metaKey) && e.key === "s"){\n' +
-    '      e.preventDefault();\n' +
-    '      saveAndClose();\n' +
-    '    }\n' +
-    '  });\n' +
-    '  \n' +
-    '  // ===== 手动内存优化 =====\n' +
-    '  var manualOptBtn = document.getElementById("manualOptBtn");\n' +
-    '  var manualOptStatus = document.getElementById("manualOptStatus");\n' +
-    '  if (manualOptBtn) {\n' +
-    '    manualOptBtn.addEventListener("click", function() {\n' +
-    '      if (manualOptBtn.disabled) return;\n' +
-    '      manualOptBtn.disabled = true;\n' +
-    '      manualOptBtn.textContent = "优化中...";\n' +
-    '      if (manualOptStatus) manualOptStatus.textContent = "正在释放内存...";\n' +
-    '      \n' +
-    '      if (window.opener && window.opener.MCJS_GAME && window.opener.MCJS_GAME.manualOptimize) {\n' +
-    '        window.opener.MCJS_GAME.manualOptimize(\n' +
-    '          function(text, pct) {\n' +
-    '            if (manualOptStatus) manualOptStatus.textContent = text + " (" + pct + "%)";\n' +
-    '          },\n' +
-    '          function() {\n' +
-    '            manualOptBtn.disabled = false;\n' +
-    '            manualOptBtn.textContent = "执行优化";\n' +
-    '            if (manualOptStatus) manualOptStatus.textContent = "优化完成";\n' +
-    '            showToast("内存优化完成");\n' +
-    '            setTimeout(function() { if (manualOptStatus) manualOptStatus.textContent = ""; }, 3000);\n' +
-    '          }\n' +
-    '        );\n' +
-    '      } else {\n' +
-    '        manualOptBtn.disabled = false;\n' +
-    '        manualOptBtn.textContent = "执行优化";\n' +
-    '        if (manualOptStatus) manualOptStatus.textContent = "无法连接主窗口";\n' +
-    '        showToast("无法执行内存优化", true);\n' +
-    '      }\n' +
-    '    });\n' +
-    '  }\n' +
-    '  \n' +
-    '  document.getElementById("clearCacheBtn").addEventListener("click", function(){\n' +
-    '    if(confirm("确定要清除所有游戏缓存吗？")){\n' +
-    '      showToast("缓存已清除");\n' +
-    '      if(window.opener) window.opener.postMessage({ type: "clear-cache" }, "*");\n' +
-    '      setTimeout(doRequestCacheInfo, 500);\n' +
-    '    }\n' +
-    '  });\n' +
-    '  document.getElementById("clearSaveBtn").addEventListener("click", function(){\n' +
-    '    if(confirm("确定要清除所有存档吗？此操作不可恢复！")){\n' +
-    '      showToast("存档已清除");\n' +
-    '      if(window.opener) window.opener.postMessage({ type: "clear-save" }, "*");\n' +
-    '    }\n' +
-    '  });\n' +
-    '  window.addEventListener("beforeunload", function(e){\n' +
-    '    if(dirty){\n' +
-    '      e.preventDefault();\n' +
-    '      e.returnValue = "";\n' +
-    '      return "";\n' +
-    '    }\n' +
-    '  });\n' +
-    '})();\n' +
-    '<\/script>\n' +
-    '</body>\n</html>';
+/* ---------- 工具 ---------- */
+function settingsEsc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function openSettingsWindow() {
-  // 防止重复打开
-  if (settingsOpening) {
-    if (settingsWindow && !settingsWindow.closed) {
-      settingsWindow.focus();
+function settingsToast(msg, type) {
+  if (window.MCJS_TOAST) { window.MCJS_TOAST(msg, type || 'success'); return; }
+  showToast(msg, type === 'error' ? 'error' : (type === 'info' ? 'info' : ''));
+}
+
+/* ---------- 主题 / 外观即时预览 ---------- */
+function resolveTheme(mode) {
+  if (mode === 'dark' || mode === 'light') return mode;
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  return 'light';
+}
+
+function applyThemeMode(mode) {
+  var t = resolveTheme(mode);
+  document.body.setAttribute('data-theme', t);
+}
+function applyAccentColor(color) {
+  document.body.setAttribute('data-accent', color || 'green');
+}
+function applyGlass(on) {
+  if (on === false) document.body.classList.add('no-glass');
+  else document.body.classList.remove('no-glass');
+}
+
+/* ---------- 控件生成 ---------- */
+function stToggle(id, key, label, desc) {
+  var on = settingsDraft[key] !== false;
+  return '<div class="setting-item">' +
+    '<div class="setting-label"><span>' + label + '</span>' + (desc ? '<small>' + desc + '</small>' : '') + '</div>' +
+    '<div class="setting-control"><button type="button" class="toggle' + (on ? ' on' : '') + '" id="' + id + '" role="switch" aria-checked="' + (on ? 'true' : 'false') + '" data-key="' + key + '"></button></div>' +
+  '</div>';
+}
+function stSelect(id, key, label, desc, options) {
+  var cur = settingsDraft[key];
+  var opts = options.map(function(o) {
+    var val = (typeof o === 'object') ? o.v : o;
+    var txt = (typeof o === 'object') ? o.t : o;
+    return '<option value="' + settingsEsc(val) + '"' + (String(cur) === String(val) ? ' selected' : '') + '>' + settingsEsc(txt) + '</option>';
+  }).join('');
+  return '<div class="setting-item">' +
+    '<div class="setting-label"><span>' + label + '</span>' + (desc ? '<small>' + desc + '</small>' : '') + '</div>' +
+    '<div class="setting-control"><select class="setting-select" id="' + id + '" data-key="' + key + '">' + opts + '</select></div>' +
+  '</div>';
+}
+function stSlider(id, key, label, desc, min, max, step, unit) {
+  var val = settingsDraft[key];
+  return '<div class="setting-item">' +
+    '<div class="setting-label"><span>' + label + '</span>' + (desc ? '<small>' + desc + '</small>' : '') + '</div>' +
+    '<div class="setting-control"><div class="setting-slider">' +
+      '<input type="range" id="' + id + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + val + '" data-key="' + key + '" data-unit="' + unit + '" />' +
+      '<span class="slider-value" id="' + id + 'Val">' + val + ' ' + unit + '</span>' +
+    '</div></div>' +
+  '</div>';
+}
+function stSeg(id, key, label, desc, segs) {
+  var cur = settingsDraft[key];
+  var btns = segs.map(function(sg) {
+    return '<button type="button" class="seg-btn' + (String(cur) === String(sg.v) ? ' active' : '') + '" data-seg="' + id + '" data-val="' + settingsEsc(sg.v) + '">' + settingsEsc(sg.t) + '</button>';
+  }).join('');
+  return '<div class="setting-item">' +
+    '<div class="setting-label"><span>' + label + '</span>' + (desc ? '<small>' + desc + '</small>' : '') + '</div>' +
+    '<div class="setting-control"><div class="seg-control" id="' + id + '" data-key="' + key + '">' + btns + '</div></div>' +
+  '</div>';
+}
+function stSwatches(id, key, label, desc, colors) {
+  var cur = settingsDraft[key] || 'green';
+  var sw = colors.map(function(c) {
+    return '<button type="button" class="color-swatch' + (cur === c.v ? ' active' : '') + '" data-swatch="' + id + '" data-val="' + c.v + '" title="' + settingsEsc(c.t) + '" style="background:' + c.hex + ';" aria-label="' + settingsEsc(c.t) + '"></button>';
+  }).join('');
+  return '<div class="setting-item">' +
+    '<div class="setting-label"><span>' + label + '</span>' + (desc ? '<small>' + desc + '</small>' : '') + '</div>' +
+    '<div class="setting-control"><div class="color-swatches" id="' + id + '" data-key="' + key + '">' + sw + '</div></div>' +
+  '</div>';
+}
+function stGroup(title, body) {
+  return '<div class="settings-group"><div class="settings-group-title">' + title + '</div>' + body + '</div>';
+}
+function stAction(id, label, cls) {
+  return '<button type="button" class="settings-action-btn ' + (cls || '') + '" id="' + id + '">' + label + '</button>';
+}
+
+/* ---------- 各分类面板 ---------- */
+function buildGeneralPane() {
+  var s = settingsDraft;
+  var mirrorOpts = [
+    { v: 0, t: '自动选择（智能测速）' },
+    { v: 1, t: '镜像 1 (144449.xyz)' },
+    { v: 2, t: '镜像 2 (IPv6)' },
+    { v: 3, t: '镜像 3 (mirror)' },
+    { v: 4, t: '镜像 4 (mirror-test)' },
+    { v: 5, t: '镜像 5 (备用)' }
+  ];
+  return stGroup('启动',
+    stSelect('setMirror', 'mirrorIndex', '首选镜像', '自动选择会在启动时测速并连接最快镜像', mirrorOpts) +
+    stSeg('setEngine', 'enginePrefer', '默认引擎', 'WASM 性能更高，JS 兼容性更好；仅影响同时提供两种引擎的版本', [
+      { v: 'auto', t: '自动' }, { v: 'wasm', t: 'WASM' }, { v: 'js', t: 'JS' }
+    ]) +
+    stToggle('setFullscreen', 'fullscreenLaunch', '全屏启动', '启动游戏后自动进入全屏') +
+    stToggle('setQuickLaunch', 'quickLaunch', '快速启动', '跳过镜像选择，直接启动') +
+    stToggle('setPopup', 'popupLaunch', '弹窗启动', '在新窗口中启动游戏') +
+    stToggle('setLoadingDetail', 'loadingDetail', '加载详情', '显示详细的加载步骤信息') +
+    stToggle('setConfirmLaunch', 'confirmLaunch', '操作二次确认', '清除数据等危险操作前弹出确认')
+  ) + stGroup('更新',
+    stToggle('setAutoUpdate', 'autoUpdateCheck', '自动检查更新', '启动时检查启动器更新') +
+    stToggle('setShowAnn', 'showAnnouncements', '显示更新公告', '启动时展示最新版本公告')
+  );
+}
+
+function buildAppearancePane() {
+  return stGroup('主题',
+    stSeg('setTheme', 'theme', '界面主题', '深色模式护眼，跟随系统将自动匹配系统外观', [
+      { v: 'light', t: '浅色' }, { v: 'dark', t: '深色' }, { v: 'system', t: '跟随系统' }
+    ]) +
+    stSwatches('setAccent', 'accentColor', '主题强调色', '按钮、开关、高亮等元素的颜色', [
+      { v: 'green', t: '经典绿', hex: '#22c55e' },
+      { v: 'blue', t: '海洋蓝', hex: '#3b82f6' },
+      { v: 'purple', t: '梦幻紫', hex: '#8b5cf6' },
+      { v: 'orange', t: '活力橙', hex: '#f59e0b' },
+      { v: 'pink', t: '樱花粉', hex: '#ec4899' }
+    ]) +
+    stToggle('setGlass', 'glassBlur', '毛玻璃效果', '关闭后界面使用纯色背景（低性能设备推荐）') +
+    stToggle('setBgImage', 'bgImage', '背景图片', '显示 Minecraft 风景背景')
+  ) + stGroup('排版',
+    stSelect('setFontSize', 'fontSize', '字体大小', '调整界面文字大小', [
+      { v: 'small', t: '小' }, { v: 'normal', t: '正常' }, { v: 'large', t: '大' }, { v: 'xlarge', t: '特大' }
+    ]) +
+    stSelect('setDensity', 'cardDensity', '卡片密度', '版本卡片的间距和大小', [
+      { v: 'compact', t: '紧凑' }, { v: 'comfortable', t: '舒适' }, { v: 'spacious', t: '宽松' }
+    ]) +
+    stToggle('setReduceMotion', 'reduceMotion', '减少动态效果', '关闭界面动画和过渡效果')
+  );
+}
+
+function buildPerformancePane() {
+  return stGroup('性能',
+    stSlider('setMemory', 'memoryLimit', '内存分配上限', '游戏可使用的最大内存', 256, 4096, 128, 'MB') +
+    stSelect('setGpu', 'gpuPrefer', 'GPU 偏好', '选择图形处理器模式', [
+      { v: 'high-performance', t: '高性能独立显卡' }, { v: 'default', t: '默认' }, { v: 'low-power', t: '节能模式' }
+    ]) +
+    stToggle('setAutoClean', 'autoClean', '启动前内存优化', '启动游戏前自动清理内存')
+  ) + stGroup('手动优化',
+    '<div class="settings-info-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+      '<div><div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">手动内存优化</div><small style="color:var(--text-muted);">立即执行内存释放和垃圾回收</small></div>' +
+      '<button type="button" class="settings-action-btn accent" id="manualOptBtn" style="width:auto;margin-top:0;padding:8px 18px;">执行优化</button>' +
+    '</div>' +
+    '<div class="info-status" id="manualOptStatus"></div>'
+  );
+}
+
+function buildStoragePane() {
+  return stGroup('存档与缓存',
+    stToggle('setSaveIso', 'saveIsolation', '存档隔离', '每个版本使用独立的存档空间') +
+    stToggle('setSaveReminder', 'saveReminder', '存档备份提醒', '定期提醒备份游戏存档，避免浏览器清理导致丢失') +
+    stSlider('setCacheLimit', 'cacheSizeLimit', '缓存上限', '游戏文件本地缓存大小限制', 512, 8192, 256, 'MB')
+  ) + stGroup('缓存信息',
+    '<div class="settings-info-card">' +
+      '<div class="info-row"><span>已用缓存</span><strong id="cacheSizeText">读取中…</strong></div>' +
+      '<div class="info-row"><span>缓存文件</span><strong id="cacheFileCount">读取中…</strong></div>' +
+    '</div>' +
+    '<div class="settings-btn-row">' +
+      stAction('clearCacheBtn', '清除游戏缓存') +
+      stAction('refreshCacheBtn', '刷新统计') +
+    '</div>' +
+    stAction('clearSaveBtn', '清除所有存档', 'danger')
+  );
+}
+
+function buildPluginsPane() {
+  var listHtml = '<div class="settings-info-card" style="color:var(--text-muted);font-size:0.82rem;text-align:center;padding:20px;">暂无已安装插件</div>';
+  try {
+    if (window.MCJS_REGISTRY) {
+      var installed = window.MCJS_REGISTRY.listUserInstalled ? window.MCJS_REGISTRY.listUserInstalled() : window.MCJS_REGISTRY.list();
+      var official = window.MCJS_REGISTRY.listOfficial ? window.MCJS_REGISTRY.listOfficial() : [];
+      var all = (official || []).concat(installed || []);
+      var seen = {};
+      var rows = [];
+      all.forEach(function(p) {
+        if (!p || seen[p.id]) return;
+        seen[p.id] = true;
+        var isInstalled = window.MCJS_REGISTRY.isInstalled(p.id);
+        var isEnabled = window.MCJS_REGISTRY.isEnabled(p.id);
+        if (!isInstalled) return;
+        rows.push(
+          '<div class="settings-plugin-row" data-pid="' + settingsEsc(p.id) + '">' +
+            '<div class="spr-name">' + settingsEsc(p.name) + ' <span class="spr-ver">v' + settingsEsc(p.version) + '</span></div>' +
+            '<button type="button" class="toggle' + (isEnabled ? ' on' : '') + '" data-plugin-toggle="' + settingsEsc(p.id) + '" role="switch" aria-checked="' + (isEnabled ? 'true' : 'false') + '" style="transform:scale(0.85);"></button>' +
+          '</div>'
+        );
+      });
+      if (rows.length) {
+        listHtml = '<div class="settings-plugin-list">' + rows.join('') + '</div>';
+      }
+    }
+  } catch (e) { console.warn('[MCJS] settings plugin list failed:', e); }
+
+  return stGroup('插件管理',
+    '<div class="setting-item" style="border-top:none;">' +
+      '<div class="setting-label"><span>已安装插件</span><small>快速开关已安装的插件，完整管理请前往插件市场</small></div>' +
+      '<div class="setting-control"><button type="button" class="settings-action-btn accent" id="openMarketFromSettings" style="width:auto;margin-top:0;padding:7px 16px;">打开插件市场</button></div>' +
+    '</div>' +
+    listHtml
+  ) + stGroup('插件偏好',
+    stToggle('setPluginAutoCheck', 'pluginAutoCheck', '自动检查插件更新', '启动时自动检查已安装插件的更新')
+  );
+}
+
+function buildPrivacyPane() {
+  return stGroup('通知',
+    stToggle('setSound', 'soundEnabled', '界面音效', '按钮点击、弹窗等操作反馈音') +
+    stSlider('setVolume', 'soundVolume', '界面音量', '调整操作反馈音的音量', 0, 100, 5, '%') +
+    stToggle('setShowAnn2', 'showAnnouncements', '更新公告弹窗', '新版本发布时在首页展示公告')
+  ) + stGroup('隐私与重置',
+    stToggle('setConfirmLaunch2', 'confirmLaunch', '危险操作确认', '清除存档 / 缓存前要求确认') +
+    stAction('resetOsGateBtn', '重置系统兼容性提示') +
+    stAction('resetAnnounceBtn', '重置更新公告提示') +
+    stAction('resetAllTipsBtn', '重置所有“不再提示”') +
+    stAction('resetSettingsBtn', '恢复全部默认设置', 'danger')
+  );
+}
+
+function buildDebugPane() {
+  return stGroup('工程调试',
+    stToggle('setDebug', 'debugMode', '调试模式', '显示详细错误信息和调用栈') +
+    stToggle('setVerbose', 'verboseLog', '详细日志', '输出所有加载步骤和钩子调用日志') +
+    stToggle('setNoCache', 'disableCache', '禁用缓存', '每次启动重新下载游戏文件（测试用）') +
+    stToggle('setFpsOverlay', 'showDebugOverlay', '调试浮层', '在游戏画面上显示 FPS 和性能信息') +
+    stToggle('setTestMode', 'testMode', '测试模式', '使用测试镜像和未发布版本')
+  );
+}
+
+function buildAboutPane() {
+  return stGroup('浏览器与设备信息',
+    '<div class="settings-info-card" id="browserInfo" style="font-family:var(--font-mono);font-size:0.76rem;">' +
+      '<div class="info-row"><span>浏览器</span><strong id="biBrowser">检测中…</strong></div>' +
+      '<div class="info-row"><span>内核</span><strong id="biEngine">检测中…</strong></div>' +
+      '<div class="info-row"><span>操作系统</span><strong id="biOS">检测中…</strong></div>' +
+      '<div class="info-row"><span>平台</span><strong id="biPlatform">检测中…</strong></div>' +
+      '<div class="info-row"><span>屏幕分辨率</span><strong id="biScreen">检测中…</strong></div>' +
+      '<div class="info-row"><span>CPU 核心</span><strong id="biCores">检测中…</strong></div>' +
+      '<div class="info-row"><span>设备内存</span><strong id="biMem">检测中…</strong></div>' +
+      '<div class="info-row"><span>语言</span><strong id="biLang">检测中…</strong></div>' +
+      '<div class="info-row"><span>触摸支持</span><strong id="biTouch">检测中…</strong></div>' +
+      '<div class="info-row"><span>WebAssembly</span><strong id="biWasm">检测中…</strong></div>' +
+      '<div class="info-row"><span>WebGL / WebGL2</span><strong id="biWebGL">检测中…</strong></div>' +
+      '<div class="info-row"><span>GPU</span><strong id="biGPU">检测中…</strong></div>' +
+      '<div class="info-row"><span>Cookie / 在线</span><strong id="biCookie">检测中…</strong></div>' +
+      '<div class="info-row" style="align-items:flex-start;"><span>User Agent</span><strong id="biUA" style="word-break:break-all;font-size:0.68rem;line-height:1.5;text-align:right;max-width:65%;">检测中…</strong></div>' +
+    '</div>' +
+    stAction('copyBrowserInfoBtn', '复制环境信息')
+  ) + stGroup('关于 MCJS Launcher',
+    '<div class="settings-info-card">' +
+      '<div class="info-row"><span>启动器版本</span><strong>v1.5.0</strong></div>' +
+      '<div class="info-row"><span>项目性质</span><strong>社区启动器</strong></div>' +
+      '<div class="info-row"><span>游戏内核</span><strong>Eaglercraft</strong></div>' +
+    '</div>' +
+    '<div class="settings-btn-row">' +
+      stAction('openHelpBtn', '打开帮助中心') +
+      stAction('openAnnHistoryBtn2', '查看历代更新公告') +
+    '</div>'
+  );
+}
+
+var SETTINGS_PANES = {
+  general: { title: '常规', build: buildGeneralPane },
+  appearance: { title: '外观', build: buildAppearancePane },
+  performance: { title: '性能', build: buildPerformancePane },
+  storage: { title: '存储', build: buildStoragePane },
+  plugins: { title: '插件', build: buildPluginsPane },
+  privacy: { title: '通知与隐私', build: buildPrivacyPane },
+  debug: { title: '高级调试', build: buildDebugPane },
+  about: { title: '关于 / 环境', build: buildAboutPane }
+};
+
+var settingsCurrentPane = 'general';
+
+function renderSettingsPane(name) {
+  var content = document.getElementById('settingsContent');
+  if (!content) return;
+  var pane = SETTINGS_PANES[name];
+  if (!pane) return;
+  settingsCurrentPane = name;
+  content.innerHTML = '<div class="settings-pane active">' + pane.build() + '</div>';
+  var navItems = document.querySelectorAll('#settingsNav .settings-nav-item');
+  navItems.forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-pane') === name);
+  });
+  bindSettingsControls(content);
+  if (name === 'storage') requestCacheInfo(true);
+  if (name === 'about') detectBrowserInfo();
+  if (name === 'plugins') bindPluginQuickToggles();
+}
+
+/* ---------- 控件绑定 ---------- */
+function markSettingsDirty() {
+  settingsDirty = true;
+  var hint = document.getElementById('settingsSaveHint');
+  if (hint) { hint.textContent = '有未保存的更改'; hint.classList.add('dirty'); }
+}
+function clearSettingsDirty() {
+  settingsDirty = false;
+  var hint = document.getElementById('settingsSaveHint');
+  if (hint) { hint.textContent = ''; hint.classList.remove('dirty'); }
+}
+
+function bindSettingsControls(root) {
+  // 开关
+  root.querySelectorAll('.toggle[data-key]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var key = btn.getAttribute('data-key');
+      var next = !btn.classList.contains('on');
+      btn.classList.toggle('on', next);
+      btn.setAttribute('aria-checked', next ? 'true' : 'false');
+      settingsDraft[key] = next;
+      markSettingsDirty();
+      applyLivePreview(key, next);
+      if (sound) sound.toggle();
+    });
+  });
+  // 下拉
+  root.querySelectorAll('select.setting-select').forEach(function(sel) {
+    sel.addEventListener('change', function() {
+      var key = sel.getAttribute('data-key');
+      var val = sel.value;
+      if (key === 'mirrorIndex') val = parseInt(val, 10) || 0;
+      settingsDraft[key] = val;
+      markSettingsDirty();
+      applyLivePreview(key, val);
+    });
+  });
+  // 滑杆
+  root.querySelectorAll('input[type="range"][data-key]').forEach(function(r) {
+    r.addEventListener('input', function() {
+      var key = r.getAttribute('data-key');
+      var unit = r.getAttribute('data-unit') || '';
+      var val;
+      if (key === 'soundVolume') {
+        val = Math.round(parseInt(r.value, 10) / 100 * 100) / 100;
+        var pct = Math.round(val * 100);
+        var valEl = document.getElementById(r.id + 'Val');
+        if (valEl) valEl.textContent = pct + ' ' + unit;
+      } else {
+        val = parseInt(r.value, 10);
+        var valEl2 = document.getElementById(r.id + 'Val');
+        if (valEl2) valEl2.textContent = val + ' ' + unit;
+      }
+      settingsDraft[key] = val;
+      markSettingsDirty();
+      applyLivePreview(key, val);
+    });
+  });
+  // 分段选择
+  root.querySelectorAll('.seg-control').forEach(function(seg) {
+    var key = seg.getAttribute('data-key');
+    seg.querySelectorAll('.seg-btn').forEach(function(b) {
+      b.addEventListener('click', function() {
+        seg.querySelectorAll('.seg-btn').forEach(function(x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        settingsDraft[key] = b.getAttribute('data-val');
+        markSettingsDirty();
+        applyLivePreview(key, b.getAttribute('data-val'));
+        if (sound) sound.click();
+      });
+    });
+  });
+  // 主题色色板
+  root.querySelectorAll('.color-swatches').forEach(function(swc) {
+    var key = swc.getAttribute('data-key');
+    swc.querySelectorAll('.color-swatch').forEach(function(sw) {
+      sw.addEventListener('click', function() {
+        swc.querySelectorAll('.color-swatch').forEach(function(x) { x.classList.remove('active'); });
+        sw.classList.add('active');
+        settingsDraft[key] = sw.getAttribute('data-val');
+        markSettingsDirty();
+        applyLivePreview(key, sw.getAttribute('data-val'));
+        if (sound) sound.click();
+      });
+    });
+  });
+}
+
+/* 外观类设置即时预览 */
+function applyLivePreview(key, val) {
+  var preview = Object.assign({}, settings, settingsDraft);
+  if (key === 'theme') { applyThemeMode(val); return; }
+  if (key === 'accentColor') { applyAccentColor(val); return; }
+  if (key === 'glassBlur') { applyGlass(val); return; }
+  if (key === 'bgImage') {
+    if (val === false) document.body.classList.add('no-bg');
+    else document.body.classList.remove('no-bg');
+    return;
+  }
+  if (key === 'reduceMotion') {
+    if (val === true) document.body.classList.add('no-anim');
+    else document.body.classList.remove('no-anim');
+    return;
+  }
+  if (key === 'fontSize') {
+    var sizeMap = { 'small': '14px', 'normal': '16px', 'large': '18px', 'xlarge': '20px' };
+    document.documentElement.style.fontSize = sizeMap[val] || '16px';
+    return;
+  }
+  if (key === 'cardDensity') {
+    document.body.classList.remove('density-compact', 'density-comfortable', 'density-spacious');
+    if (val !== 'comfortable') document.body.classList.add('density-' + val);
+    var gapMap = { 'compact': '8px', 'comfortable': '14px', 'spacious': '20px' };
+    var padMap = { 'compact': '12px 14px 10px', 'comfortable': '18px 20px 14px', 'spacious': '24px 26px 18px' };
+    document.documentElement.style.setProperty('--card-gap', gapMap[val] || '14px');
+    document.documentElement.style.setProperty('--card-padding', padMap[val] || '18px 20px 14px');
+    return;
+  }
+  if (key === 'soundEnabled') { if (sound) sound.setEnabled(val !== false); return; }
+  if (key === 'soundVolume') {
+    if (sound) {
+      sound.setVolume(Math.max(0, Math.min(1, val / 100)));
+      sound.unlock(); sound.hover();
     }
     return;
   }
-  
-  if (settingsWindow && !settingsWindow.closed) {
-    settingsWindow.focus();
-    return;
-  }
-  
-  settingsOpening = true;
-  
-  if (sound) sound.unlock();
-  if (sound) sound.open();
-
-  var html = buildSettingsHTML();
-  var win = window.open('', '_blank', 'width=560,height=700,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes');
-  if (!win) {
-    settingsOpening = false;
-    alert('弹窗被拦截，请允许此站点弹出窗口。');
-    return;
-  }
-  settingsWindow = win;
-  try {
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-  } catch(e) {
-    console.warn('[MCJS] Failed to write settings window:', e);
-    alert('无法打开设置窗口，请检查浏览器设置。');
-    settingsWindow = null;
-  }
-  
-  // 延迟重置锁
-  setTimeout(function() {
-    settingsOpening = false;
-  }, 1000);
 }
 
+/* ---------- 缓存信息 ---------- */
+function requestCacheInfo(once) {
+  if (window.MCJS_GAME && window.MCJS_GAME.getCacheSize) {
+    window.MCJS_GAME.getCacheSize().then(function(info) {
+      var sizeText = window.MCJS_GAME.formatBytes ? window.MCJS_GAME.formatBytes(info.bytes) : (info.bytes + ' B');
+      var sizeEl = document.getElementById('cacheSizeText');
+      var countEl = document.getElementById('cacheFileCount');
+      if (sizeEl) sizeEl.textContent = sizeText;
+      if (countEl) countEl.textContent = (info.count != null ? info.count : 0) + ' 个文件';
+    }).catch(function() {
+      var sizeEl = document.getElementById('cacheSizeText');
+      var countEl = document.getElementById('cacheFileCount');
+      if (sizeEl) sizeEl.textContent = '无法读取';
+      if (countEl) countEl.textContent = '0 个文件';
+    });
+  }
+}
+
+/* ---------- 浏览器信息检测 ---------- */
+function detectBrowserInfo() {
+  if (window._mcjsSettingsBrowserInfo) { fillBrowserInfo(window._mcjsSettingsBrowserInfo); return; }
+  var ua = navigator.userAgent || '';
+  var browser = '未知', engine = '未知';
+  if (/Edg\/(\d+)/.test(ua)) { browser = 'Edge ' + RegExp.$1; engine = 'Blink'; }
+  else if (/OPR\/(\d+)/.test(ua)) { browser = 'Opera ' + RegExp.$1; engine = 'Blink'; }
+  else if (/Chrome\/(\d+)/.test(ua)) { browser = 'Chrome ' + RegExp.$1; engine = 'Blink'; }
+  else if (/Firefox\/(\d+)/.test(ua)) { browser = 'Firefox ' + RegExp.$1; engine = 'Gecko'; }
+  else if (/Safari\/(\d+)/.test(ua)) { browser = 'Safari ' + RegExp.$1; engine = 'WebKit'; }
+  var os = '未知';
+  if (/Windows NT 10/.test(ua)) os = 'Windows 10/11';
+  else if (/Windows NT 6\.3/.test(ua)) os = 'Windows 8.1';
+  else if (/Windows NT 6\.1/.test(ua)) os = 'Windows 7';
+  else if (/Mac OS X ([\d_]+)/.test(ua)) os = 'macOS ' + RegExp.$1.replace(/_/g, '.');
+  else if (/Android (\d+)/.test(ua)) os = 'Android ' + RegExp.$1;
+  else if (/iPhone OS (\d+)/.test(ua)) os = 'iOS ' + RegExp.$1;
+  else if (/Linux/.test(ua)) os = 'Linux';
+  var platform = navigator.platform || '未知';
+  var screen = (window.screen ? window.screen.width + ' × ' + window.screen.height : '未知') + ' @ ' + (window.devicePixelRatio || 1) + 'x';
+  var cores = navigator.hardwareConcurrency || '未知';
+  var mem = navigator.deviceMemory ? navigator.deviceMemory + ' GB' : '未知';
+  var lang = navigator.language || '未知';
+  var touch = ('ontouchstart' in window) ? '支持' : '不支持';
+  var wasm = (typeof WebAssembly !== 'undefined') ? '支持' : '不支持';
+  var webgl = '不支持', webgl2 = '不支持', gpu = '未知';
+  try {
+    var c = document.createElement('canvas').getContext('webgl');
+    if (c) { webgl = '支持'; var dbg = c.getExtension('WEBGL_debug_renderer_info'); if (dbg) gpu = c.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '未知'; }
+  } catch (e) {}
+  try {
+    var c2 = document.createElement('canvas').getContext('webgl2');
+    if (c2) webgl2 = '支持';
+  } catch (e) {}
+  var info = {
+    browser: browser, engine: engine, os: os, platform: platform, screen: screen,
+    cores: cores, mem: mem, lang: lang, touch: touch, wasm: wasm,
+    webgl: webgl + ' / ' + webgl2, gpu: gpu,
+    cookie: (navigator.cookieEnabled ? '启用' : '禁用') + ' / ' + (navigator.onLine ? '在线' : '离线'),
+    ua: ua
+  };
+  window._mcjsSettingsBrowserInfo = info;
+  fillBrowserInfo(info);
+}
+function fillBrowserInfo(info) {
+  var map = { biBrowser: 'browser', biEngine: 'engine', biOS: 'os', biPlatform: 'platform', biScreen: 'screen', biCores: 'cores', biMem: 'mem', biLang: 'lang', biTouch: 'touch', biWasm: 'wasm', biWebGL: 'webgl', biGPU: 'gpu', biCookie: 'cookie', biUA: 'ua' };
+  Object.keys(map).forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = info[map[id]];
+  });
+}
+
+/* ---------- 插件快速开关 ---------- */
+function bindPluginQuickToggles() {
+  var content = document.getElementById('settingsContent');
+  if (!content || !window.MCJS_REGISTRY) return;
+  content.querySelectorAll('[data-plugin-toggle]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var pid = btn.getAttribute('data-plugin-toggle');
+      try {
+        if (window.MCJS_REGISTRY.isEnabled(pid)) {
+          window.MCJS_REGISTRY.disable(pid);
+          btn.classList.remove('on');
+          btn.setAttribute('aria-checked', 'false');
+          settingsToast('已禁用插件', 'info');
+        } else {
+          window.MCJS_REGISTRY.enable(pid);
+          btn.classList.add('on');
+          btn.setAttribute('aria-checked', 'true');
+          settingsToast('已启用插件', 'success');
+        }
+        if (sound) sound.toggle();
+      } catch (e) {
+        settingsToast('操作失败: ' + e.message, 'error');
+      }
+    });
+  });
+}
+
+/* ---------- 保存 / 重置 / 导入导出 ---------- */
+function saveSettingsFromModal() {
+  settings = ensureSettingsDefaults(settingsDraft);
+  window.MCJS_SETTINGS = settings;
+  try { window.MCJS_SAVE_SETTINGS(settings); } catch (e) {}
+  applyAllSettings();
+  clearSettingsDirty();
+  settingsToast('设置已保存', 'success');
+  closeSettingsModal(true);
+}
+
+function applyAllSettings() {
+  applyBackground();
+  applyTheme();
+  applyFontSize();
+  applyCardDensity();
+  applyThemeMode(settings.theme || 'light');
+  applyAccentColor(settings.accentColor || 'green');
+  applyGlass(settings.glassBlur !== false);
+  if (sound) {
+    sound.setEnabled(settings.soundEnabled !== false);
+    sound.setVolume(settings.soundVolume == null ? 0.7 : Math.max(0, Math.min(1, settings.soundVolume / 100)));
+  }
+  // 通知系统主题变化（供插件使用）
+  try {
+    if (window.MCJS_EVENTS) window.MCJS_EVENTS.emit('settings:updated', settings);
+  } catch (e) {}
+}
+
+function resetAllSettings() {
+  if (!confirmAction('确定恢复全部默认设置吗？')) return;
+  settingsDraft = Object.assign({}, DEFAULT_APP_SETTINGS);
+  settings = ensureSettingsDefaults(settingsDraft);
+  window.MCJS_SETTINGS = settings;
+  try { window.MCJS_SAVE_SETTINGS(settings); } catch (e) {}
+  applyAllSettings();
+  renderSettingsPane(settingsCurrentPane);
+  clearSettingsDirty();
+  settingsToast('已恢复默认设置', 'success');
+}
+
+function confirmAction(msg) {
+  if (settingsDraft && settingsDraft.confirmLaunch === false) return true;
+  return confirm(msg);
+}
+
+function exportSettings() {
+  try {
+    var data = JSON.stringify({ type: 'mcjs-settings', version: 1, settings: settingsDraft || settings }, null, 2);
+    var blob = new Blob([data], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'mcjs-settings.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+    settingsToast('配置已导出', 'success');
+  } catch (e) {
+    settingsToast('导出失败: ' + e.message, 'error');
+  }
+}
+
+function importSettings(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      var incoming = data && data.settings ? data.settings : data;
+      if (!incoming || typeof incoming !== 'object') throw new Error('文件格式不正确');
+      settingsDraft = ensureSettingsDefaults(Object.assign({}, DEFAULT_APP_SETTINGS, incoming));
+      // 应用外观预览
+      applyThemeMode(settingsDraft.theme);
+      applyAccentColor(settingsDraft.accentColor);
+      applyGlass(settingsDraft.glassBlur);
+      renderSettingsPane(settingsCurrentPane);
+      markSettingsDirty();
+      settingsToast('配置已导入，点击「保存设置」生效', 'success');
+    } catch (err) {
+      settingsToast('导入失败: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- 打开 / 关闭 ---------- */
+function openSettingsWindow() {
+  if (!settingsModalEl) return;
+  settingsDraft = Object.assign({}, ensureSettingsDefaults(settings || {}));
+  clearSettingsDirty();
+  if (sound) { sound.unlock(); sound.open(); }
+  renderSettingsPane('general');
+  settingsModalEl.classList.add('active');
+  // 启动缓存信息轮询
+  if (settingsCacheTimer) clearInterval(settingsCacheTimer);
+  settingsCacheTimer = setInterval(function() {
+    if (settingsModalEl.classList.contains('active') && settingsCurrentPane === 'storage') {
+      requestCacheInfo(true);
+    }
+  }, 4000);
+}
+
+function closeSettingsModal(skipConfirm) {
+  if (!settingsModalEl) return;
+  if (!skipConfirm && settingsDirty) {
+    if (!confirm('有未保存的更改，确定要关闭吗？')) return;
+  }
+  settingsModalEl.classList.remove('active');
+  if (settingsCacheTimer) { clearInterval(settingsCacheTimer); settingsCacheTimer = null; }
+  // 关闭后恢复为已保存的外观
+  applyAllSettings();
+  if (sound) sound.close();
+}
+
+/* ---------- 事件绑定 ---------- */
+(function bindSettingsModal() {
+  // 左侧导航
+  var nav = document.getElementById('settingsNav');
+  if (nav) {
+    nav.querySelectorAll('.settings-nav-item').forEach(function(item) {
+      item.addEventListener('click', function() {
+        var pane = item.getAttribute('data-pane');
+        if (sound) sound.click();
+        renderSettingsPane(pane);
+      });
+    });
+  }
+
+  // 顶栏设置按钮
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', openSettingsWindow);
+  }
+
+  // 关闭按钮 / 遮罩 / 取消
+  var closeBtn = document.getElementById('settingsCloseBtn');
+  if (closeBtn) closeBtn.addEventListener('click', function() { closeSettingsModal(false); });
+  var cancelBtn = document.getElementById('settingsCancelBtn');
+  if (cancelBtn) cancelBtn.addEventListener('click', function() { closeSettingsModal(false); });
+  if (settingsModalEl) {
+    settingsModalEl.addEventListener('click', function(e) {
+      if (e.target === settingsModalEl) closeSettingsModal(false);
+    });
+  }
+  var saveBtn = document.getElementById('settingsSaveBtn');
+  if (saveBtn) saveBtn.addEventListener('click', function() {
+    if (sound) sound.click();
+    saveSettingsFromModal();
+  });
+
+  // 底部：恢复默认 / 导出 / 导入
+  var resetBtn = document.getElementById('settingsResetBtn');
+  if (resetBtn) resetBtn.addEventListener('click', resetAllSettings);
+  var exportBtn = document.getElementById('settingsExportBtn');
+  if (exportBtn) exportBtn.addEventListener('click', exportSettings);
+  var importBtn = document.getElementById('settingsImportBtn');
+  var importFile = document.getElementById('settingsImportFile');
+  if (importBtn && importFile) {
+    importBtn.addEventListener('click', function() { importFile.click(); });
+    importFile.addEventListener('change', function() {
+      if (importFile.files && importFile.files[0]) importSettings(importFile.files[0]);
+      importFile.value = '';
+    });
+  }
+
+  // 面板内按钮（事件委托）
+  document.getElementById('settingsContent') && document.getElementById('settingsContent').addEventListener('click', function(e) {
+    var t = e.target.closest ? e.target.closest('button') : null;
+    if (!t) return;
+    var id = t.id;
+    if (id === 'manualOptBtn') {
+      t.disabled = true;
+      t.textContent = '优化中…';
+      var st = document.getElementById('manualOptStatus');
+      if (st) st.textContent = '正在释放内存…';
+      if (window.MCJS_GAME && window.MCJS_GAME.manualOptimize) {
+        window.MCJS_GAME.manualOptimize(
+          function(text, pct) { if (st) st.textContent = text + ' (' + pct + '%)'; },
+          function() {
+            t.disabled = false; t.textContent = '执行优化';
+            if (st) st.textContent = '优化完成';
+            settingsToast('内存优化完成', 'success');
+            setTimeout(function() { if (st) st.textContent = ''; }, 3000);
+          }
+        );
+      } else {
+        t.disabled = false; t.textContent = '执行优化';
+        if (st) st.textContent = '游戏模块未就绪';
+        settingsToast('暂时无法执行内存优化', 'error');
+      }
+      return;
+    }
+    if (id === 'clearCacheBtn') {
+      if (!confirmAction('确定要清除所有游戏缓存吗？')) return;
+      if (window.MCJS_GAME && window.MCJS_GAME.clearCache) {
+        window.MCJS_GAME.clearCache().then(function() {
+          settingsToast('缓存已清除', 'success');
+          setTimeout(function() { requestCacheInfo(true); }, 600);
+        });
+      } else {
+        settingsToast('游戏模块未就绪', 'error');
+      }
+      return;
+    }
+    if (id === 'refreshCacheBtn') { requestCacheInfo(true); return; }
+    if (id === 'clearSaveBtn') {
+      if (!confirmAction('确定要清除所有存档吗？此操作不可恢复！')) return;
+      if (window.MCJS_GAME && window.MCJS_GAME.clearSaveData) {
+        window.MCJS_GAME.clearSaveData().then(function() {
+          settingsToast('存档已清除', 'success');
+        });
+      } else {
+        settingsToast('游戏模块未就绪', 'error');
+      }
+      return;
+    }
+    if (id === 'openMarketFromSettings') {
+      closeSettingsModal(true);
+      setTimeout(function() {
+        if (window.MCJS_PLUGIN_MARKET) window.MCJS_PLUGIN_MARKET.open();
+        else settingsToast('插件市场尚未加载', 'error');
+      }, 200);
+      return;
+    }
+    if (id === 'copyBrowserInfoBtn') {
+      var info = window._mcjsSettingsBrowserInfo || {};
+      var text = Object.keys(info).map(function(k) { return k + ': ' + info[k]; }).join('\n');
+      try {
+        navigator.clipboard.writeText(text).then(function() { settingsToast('已复制到剪贴板', 'success'); })
+          .catch(function() { settingsToast('复制失败', 'error'); });
+      } catch (err) { settingsToast('复制失败', 'error'); }
+      return;
+    }
+    if (id === 'openHelpBtn') {
+      closeSettingsModal(true);
+      setTimeout(function() {
+        var hm = document.getElementById('helpModal');
+        if (hm) hm.style.display = 'flex';
+      }, 200);
+      return;
+    }
+    if (id === 'openAnnHistoryBtn2') {
+      if (window.MCJS_OPEN_ANN_HISTORY) window.MCJS_OPEN_ANN_HISTORY();
+      else settingsToast('公告功能未就绪', 'error');
+      return;
+    }
+    if (id === 'resetOsGateBtn') {
+      try {
+        localStorage.removeItem('mcjs_os_gate_ack');
+        settingsToast('已重置系统兼容性提示，刷新后生效', 'success');
+      } catch (err) { settingsToast('重置失败', 'error'); }
+      return;
+    }
+    if (id === 'resetAnnounceBtn') {
+      try {
+        Object.keys(localStorage).filter(function(k) { return k.indexOf('mcjs_announce_') === 0; })
+          .forEach(function(k) { localStorage.removeItem(k); });
+        settingsToast('已重置公告提示，刷新后生效', 'success');
+      } catch (err) { settingsToast('重置失败', 'error'); }
+      return;
+    }
+    if (id === 'resetAllTipsBtn') {
+      if (!confirmAction('确定重置所有"不再提示"类设置吗？')) return;
+      try {
+        Object.keys(localStorage).filter(function(k) {
+          return k.indexOf('mcjs_announce_') === 0 || k === 'mcjs_os_gate_ack';
+        }).forEach(function(k) { localStorage.removeItem(k); });
+        settingsToast('已重置全部提示，刷新后生效', 'success');
+      } catch (err) { settingsToast('重置失败', 'error'); }
+      return;
+    }
+    if (id === 'resetSettingsBtn') { resetAllSettings(); return; }
+  });
+
+  // ESC 关闭
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && settingsModalEl && settingsModalEl.classList.contains('active')) {
+      // 若插件市场等其他弹窗在最上层，不处理
+      closeSettingsModal(false);
+    }
+  });
+
+  // 系统主题变化监听
+  if (window.matchMedia) {
+    _systemDarkMql = window.matchMedia('(prefers-color-scheme: dark)');
+    var handler = function() {
+      if ((settingsDraft ? settingsDraft.theme : settings.theme) === 'system') {
+        applyThemeMode('system');
+      }
+    };
+    if (_systemDarkMql.addEventListener) _systemDarkMql.addEventListener('change', handler);
+    else if (_systemDarkMql.addListener) _systemDarkMql.addListener(handler);
+  }
+})();
+
+/* 兼容旧的弹窗设置通信（外部页面若以 postMessage 通信，忽略即可） */
 window.addEventListener('message', function(e) {
   if (!e.data) return;
   var data = e.data;
-  if (data.type === 'settings-updated') {
-    var newSettings = data.settings;
-    if (newSettings) {
-      // 确保新设置也有默认值
-      newSettings = ensureSettingsDefaults(newSettings);
-      window.MCJS_SETTINGS = newSettings;
-      window.MCJS_SAVE_SETTINGS(newSettings);
-      settings = newSettings;
-      applyBackground();
-      applyTheme();
-      applyFontSize();
-      applyCardDensity();
-      if (sound) sound.setEnabled(settings.soundEnabled !== false);
-      console.log('[MCJS] Settings updated from settings window');
-    }
+  if (data.type === 'settings-updated' && data.settings) {
+    // 来自旧版弹窗窗口的消息（理论上不再产生），做兜底合并
+    var ns = ensureSettingsDefaults(data.settings);
+    window.MCJS_SETTINGS = ns;
+    settings = ns;
+    try { window.MCJS_SAVE_SETTINGS(ns); } catch (err) {}
+    applyAllSettings();
   }
-  if (data.type === 'get-cache-info') {
-    if (window.MCJS_GAME && window.MCJS_GAME.getCacheSize) {
-      window.MCJS_GAME.getCacheSize().then(function(info) {
-        var sizeText = window.MCJS_GAME.formatBytes(info.bytes);
-        try {
-          e.source.postMessage({
-            type: 'cache-info-response',
-            sizeText: sizeText,
-            count: info.count
-          }, '*');
-        } catch(ex) {}
-      }).catch(function() {
-        try {
-          e.source.postMessage({
-            type: 'cache-info-response',
-            sizeText: '无法读取',
-            count: 0
-          }, '*');
-        } catch(ex) {}
-      });
-    }
+  // 旧弹窗请求缓存信息 / 清除数据的兼容响应
+  if (data.type === 'get-cache-info' && window.MCJS_GAME && window.MCJS_GAME.getCacheSize) {
+    window.MCJS_GAME.getCacheSize().then(function(info) {
+      try {
+        e.source.postMessage({ type: 'cache-info-response', sizeText: window.MCJS_GAME.formatBytes(info.bytes), count: info.count }, '*');
+      } catch (ex) {}
+    }).catch(function() {
+      try { e.source.postMessage({ type: 'cache-info-response', sizeText: '无法读取', count: 0 }, '*'); } catch (ex) {}
+    });
   }
-  if (data.type === 'clear-cache') {
-    if (window.MCJS_GAME && window.MCJS_GAME.clearCache) {
-      window.MCJS_GAME.clearCache().then(function() {
-        console.log('[MCJS] Cache cleared from settings window');
-      });
-    }
+  if (data.type === 'clear-cache' && window.MCJS_GAME && window.MCJS_GAME.clearCache) {
+    window.MCJS_GAME.clearCache();
   }
-  if (data.type === 'clear-save') {
-    if (window.MCJS_GAME && window.MCJS_GAME.clearSaveData) {
-      window.MCJS_GAME.clearSaveData().then(function() {
-        console.log('[MCJS] Save data cleared from settings window');
-      });
-    }
+  if (data.type === 'clear-save' && window.MCJS_GAME && window.MCJS_GAME.clearSaveData) {
+    window.MCJS_GAME.clearSaveData();
   }
 });
 
-settingsBtn.addEventListener('click', function(){
-  openSettingsWindow();
-});
 
 document.addEventListener('keydown', function(e){
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
@@ -1863,7 +2090,7 @@ function getLatestAnnouncement() {
   if (window.MCJS_GET_LATEST_ANNOUNCEMENT) {
     try { return window.MCJS_GET_LATEST_ANNOUNCEMENT(); } catch (e) {}
   }
-  return { version: 'v1.3.1', date: '', title: '更新公告', items: [] };
+  return { version: 'v1.5.0', date: '', title: '更新公告', items: [] };
 }
 
 function getAllAnnouncements() {
@@ -2017,6 +2244,64 @@ function openAnnouncementHistory() {
   });
 }
 
+/* ========== v1.5 附加功能 ========== */
+// 存档备份提醒：每 30 天提醒一次（可在设置中关闭）
+function maybeRemindBackup() {
+  try {
+    if (settings.saveReminder === false) return;
+    var KEY = 'mcjs_backup_remind_last';
+    var now = Date.now();
+    var last = 0;
+    try { last = parseInt(localStorage.getItem(KEY) || '0', 10) || 0; } catch (e) {}
+    var THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+    if (now - last < THIRTY_DAYS) return;
+    // 首次使用不提醒（last 为 0 时仅记录时间，不打扰）
+    if (!last) { try { localStorage.setItem(KEY, String(now)); } catch (e) {} return; }
+    try { localStorage.setItem(KEY, String(now)); } catch (e) {}
+    setTimeout(function() {
+      if (window.MCJS_TOAST) window.MCJS_TOAST('记得定期备份游戏存档哦～可在设置 → 存储中管理', 'info');
+    }, 8000);
+  } catch (e) {}
+}
+
+// 暴露"历代公告"打开入口（供设置面板调用）
+window.MCJS_OPEN_ANN_HISTORY = function() {
+  try { openAnnouncementHistory(); }
+  catch (e) { console.warn('[MCJS] openAnnouncementHistory failed:', e); }
+};
+
+// 引擎偏好：把用户选择的版本解析为实际启动的版本（JS/WASM 成对切换）
+function resolveEngineVersion(ver) {
+  var prefer = settings.enginePrefer || 'auto';
+  if (prefer === 'auto' || !ver || !ver.id) return ver;
+  var versions = getVersions();
+  if (!versions) return ver;
+  function findById(id) {
+    return versions.find(function(v) { return v.id === id; });
+  }
+  var id = ver.id;
+  var targetId = null;
+  if (prefer === 'wasm') {
+    if (/wasm$/i.test(id)) return ver;
+    // pixelclient/1.8.8 -> pixelclient/1.8.8wasm；1.8.8 -> 1.8.8wasm
+    targetId = id + 'wasm';
+  } else if (prefer === 'js') {
+    if (/wasm$/i.test(id)) {
+      targetId = id.replace(/wasm$/i, '');
+    } else {
+      return ver;
+    }
+  }
+  if (targetId) {
+    var found = findById(targetId);
+    if (found) {
+      console.log('[MCJS] enginePrefer=' + prefer + '，切换版本:', id, '->', targetId);
+      return found;
+    }
+  }
+  return ver;
+}
+
 /* ========== 初始化 ========== */
 function safeRun(fn, label){
   try { fn(); }
@@ -2034,6 +2319,20 @@ function safeRun(fn, label){
   safeRun(applyTheme, 'applyTheme');
   safeRun(applyFontSize, 'applyFontSize');
   safeRun(applyCardDensity, 'applyCardDensity');
+  // v1.5：主题模式 / 强调色 / 毛玻璃
+  safeRun(function(){
+    applyThemeMode(settings.theme || 'light');
+    applyAccentColor(settings.accentColor || 'green');
+    applyGlass(settings.glassBlur !== false);
+    if (window.matchMedia) {
+      _systemDarkMql = window.matchMedia('(prefers-color-scheme: dark)');
+      var mqlHandler = function() {
+        if ((settings.theme || 'light') === 'system') applyThemeMode('system');
+      };
+      if (_systemDarkMql.addEventListener) _systemDarkMql.addEventListener('change', mqlHandler);
+      else if (_systemDarkMql.addListener) _systemDarkMql.addListener(mqlHandler);
+    }
+  }, 'applyThemeExtras');
   
   // 暴露全局调试钩子
   window.MCJS = window.MCJS || {};
@@ -2048,12 +2347,31 @@ function safeRun(fn, label){
     safeRun(function(){ attachHoverSound(document); }, 'attachHoverSound');
     safeRun(initFAQAccordion, 'initFAQAccordion');
     safeRun(updateSearchClearBtn, 'updateSearchClearBtn');
-    safeRun(showAnnouncement, 'showAnnouncement');
+    if (settings.showAnnouncements !== false) {
+      safeRun(showAnnouncement, 'showAnnouncement');
+    }
+    // v1.5：启动时自动检查插件更新
+    if (settings.pluginAutoCheck !== false && window.MCJS_REGISTRY && window.MCJS_REGISTRY.checkAllUpdates) {
+      setTimeout(function() {
+        try {
+          window.MCJS_REGISTRY.checkAllUpdates().then(function(updates) {
+            if (updates && updates.length) {
+              var names = updates.slice(0, 3).map(function(u) { return u.name || u.id; }).join('、');
+              var extra = updates.length > 3 ? (' 等' + updates.length + '个') : '';
+              if (window.MCJS_TOAST) window.MCJS_TOAST('有插件可更新：' + names + extra + '，前往插件市场查看', 'info');
+            }
+          }).catch(function() {});
+        } catch (e) {}
+      }, 4000);
+    }
+    // v1.5：存档备份提醒（每 30 天一次）
+    safeRun(maybeRemindBackup, 'maybeRemindBackup');
     
     requestAnimationFrame(function(){
       try {
         sound = new SoundManager();
         sound.setEnabled(settings.soundEnabled !== false);
+        try { sound.setVolume(settings.soundVolume == null ? 0.7 : Math.max(0, Math.min(1, settings.soundVolume / 100))); } catch(e) {}
         // 暴露给插件市场/编辑器等模块使用
         window.MCJS = window.MCJS || {};
         window.MCJS.sound = sound;
@@ -2209,18 +2527,66 @@ window.MCJS_ESCAPE_HTML = escapeHtml2;
       custom: 'CUSTOM'
     })[cat] || 'PLUGIN';
   }
+  function pluginCatIcon(cat) {
+    return ({
+      compatibility: '🛡',
+      performance: '⚡',
+      appearance: '🎨',
+      utility: '🧩',
+      language: '🌐',
+      custom: '📦'
+    })[cat] || '🧩';
+  }
   function renderInstalledPluginsList() {
     var section = document.getElementById('installedPluginsSection');
     var listEl = document.getElementById('installedPluginsList');
     var countEl = document.getElementById('installedPluginsCount');
     if (!section || !listEl) return;
-    if (!window.MCJS_REGISTRY) return;
-    var enabled = window.MCJS_REGISTRY.list().filter(function(p) {
-      return window.MCJS_REGISTRY.isEnabled(p.id);
+    if (!window.MCJS_REGISTRY) { section.style.display = 'none'; return; }
+    var installed = window.MCJS_REGISTRY.list().filter(function(p) {
+      return window.MCJS_REGISTRY.isInstalled(p.id);
     });
-    // 主页不再展示已安装插件面板(避免冗余入口,统一在插件市场的"已安装"tab 管理)
-    section.style.display = 'none';
-    if (countEl) countEl.textContent = enabled.length + ' 个插件已启用';
+    if (!installed.length) { section.style.display = 'none'; return; }
+    section.style.display = '';
+    var enabledCount = 0;
+    listEl.innerHTML = installed.map(function(p) {
+      var en = window.MCJS_REGISTRY.isEnabled(p.id);
+      if (en) enabledCount++;
+      var cat = p.category || 'custom';
+      var name = p.name || p.id;
+      var ver = p.version ? ('v' + p.version) : '';
+      var desc = p.description || '';
+      if (desc.length > 42) desc = desc.slice(0, 42) + '…';
+      return '<div class="installed-plugin-card">' +
+        '<div class="installed-plugin-icon ' + cat + '">' + pluginCatIcon(cat) + '</div>' +
+        '<div class="installed-plugin-info">' +
+          '<div class="installed-plugin-name">' + escHome(name) + '</div>' +
+          (ver ? '<div class="installed-plugin-version">' + escHome(ver) + '</div>' : '') +
+          (desc ? '<div class="installed-plugin-desc">' + escHome(desc) + '</div>' : '') +
+        '</div>' +
+        '<button type="button" class="installed-plugin-toggle' + (en ? ' on' : '') + '" ' +
+          'role="switch" aria-checked="' + (en ? 'true' : 'false') + '" ' +
+          'data-pid="' + escHome(p.id) + '" title="' + (en ? '点击停用' : '点击启用') + '"></button>' +
+      '</div>';
+    }).join('');
+    if (countEl) countEl.textContent = enabledCount + ' / ' + installed.length + ' 个插件已启用';
+    // 绑定开关
+    listEl.querySelectorAll('.installed-plugin-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var pid = btn.getAttribute('data-pid');
+        var turnOn = !btn.classList.contains('on');
+        try {
+          if (turnOn) window.MCJS_REGISTRY.enable(pid);
+          else window.MCJS_REGISTRY.disable(pid);
+          if (window.MCJS && window.MCJS.sound) window.MCJS.sound.toggle();
+        } catch (e) { console.warn('[MCJS] plugin toggle failed:', e); }
+        renderInstalledPluginsList();
+      });
+    });
+  }
+  function escHome(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   var manageBtn = document.getElementById('managePluginsBtn');
@@ -2428,7 +2794,7 @@ function buildPluginDocsHTML() {
 
     '<section class="plugin-doc-section">',
     '<h3>远程加载 / 第三方市场</h3>',
-    '<p>MCJS v1.3 开放了插件加载链路,支持以下方式从远程安装插件:</p>',
+    '<p>MCJS v1.4 开放了插件加载链路,支持以下方式从远程安装插件:</p>',
     '<ol>',
     '<li><strong>添加第三方仓库</strong>:在远程仓库标签点击 "添加仓库",填入任何符合协议的 JSON manifest 地址。</li>',
     '<li><strong>URL 直接导入</strong>:在 "浏览" 标签底部粘贴 URL(GitHub raw、CDN、个人服务器),选择要安装的插件即可。</li>',

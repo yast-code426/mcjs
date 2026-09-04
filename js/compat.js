@@ -594,7 +594,7 @@
       } catch (e) { return false; }
     })(),
     polyfilled: true,
-    version: '1.3.1-compat'
+    version: '1.4.1-compat'
   };
 
   if (globalScope.console && console.log) {

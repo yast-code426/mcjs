@@ -38,12 +38,14 @@ var STATIC_ASSETS = [
   './js/compat.js',
   './js/versions.js',
   './js/game.js',
+  './js/announcements.js',
   './js/plugin-api.js',
   './js/plugin-registry.js',
   './js/plugin-market.js',
   './js/plugin-editor.js',
   './js/app.js',
-  './assets/favicon.svg'
+  './assets/favicon.svg',
+  './assets/bg.jpg'
 ];
 
 function asPromise(v) { return Promise.resolve(v); }
