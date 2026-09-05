@@ -964,6 +964,35 @@ function buildHostJS(){
   ].join('');
 }
 
+/* 统一构建注入到游戏页面的启动脚本(内存/存档/GPU/调试),
+   避免缓存命中与重新拉取两条路径注入不一致 */
+function buildLaunchScripts(settings, version){
+  var scripts=[];
+  scripts.push('window.__MCJS_MEM_LIMIT__='+JSON.stringify(settings.memoryLimit)+';');
+  if(settings.saveIsolation){
+    scripts.push('window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';');
+  }
+  // GPU 偏好(之前设置了但从未注入,空开关)
+  if(settings.gpuPrefer && settings.gpuPrefer!=='default'){
+    scripts.push(
+      '(function(){try{'+
+      'var g='+JSON.stringify(settings.gpuPrefer)+';'+
+      'if(navigator.gpu&&navigator.gpu.requestAdapter){'+
+      'var _origRA=navigator.gpu.requestAdapter.bind(navigator.gpu);'+
+      'navigator.gpu.requestAdapter=function(o){o=o||{};o.powerPreference=o.powerPreference||g;return _origRA(o);};'+
+      '}'+
+      'var c=document.createElement("canvas");'+
+      'var gl=c.getContext("webgl2")||c.getContext("webgl");'+
+      'if(gl&&gl.getContextAttributes){var a=gl.getContextAttributes();}'+
+      '}catch(e){}})();'
+    );
+  }
+  if(settings.debugMode){
+    scripts.push('window.__MCJS_DEBUG__=true;window.addEventListener("error",function(e){console.error("[MCJS-GAME]",e.message,e.filename+":"+e.lineno);});window.addEventListener("unhandledrejection",function(e){console.error("[MCJS-GAME] unhandled:",e.reason);});');
+  }
+  return scripts;
+}
+
 function injectIntoHTML(html, scripts, baseURL, pluginInjects) {
   // pluginInjects: [{type:'js'|'css', content:string, pluginId:string}] - 来自插件的额外注入
   pluginInjects = pluginInjects || [];
@@ -1077,7 +1106,9 @@ var lastLaunchedVersion=null;
 
 function launchGame(version,onProgress,onReady,onError,autoMode){
   var settings=window.MCJS_SETTINGS;
-  var mirrorIdx = settings.mirrorIndex;
+  var verbose=settings&&settings.verboseLog;
+  if(verbose) console.log('[MCJS] launchGame start:', version.id, 'autoMode=' + autoMode, 'cacheDisabled=' + !!settings.disableCache);
+  var mirrorIdx = settings.mirrorIdx;
   if(mirrorIdx < 0 || mirrorIdx >= version.mirrors.length) {
     mirrorIdx = 0;
     settings.mirrorIndex = 0;
@@ -1127,12 +1158,15 @@ function launchGame(version,onProgress,onReady,onError,autoMode){
   optimizeMemory(function(){
     try{onProgress('内存优化完成',30);}catch(e){}
 
+    var cacheDisabled = !!(settings.disableCache);
     getCachedHTML(version.id).then(function(cached){
-      if(cached){
+      if(cached && !cacheDisabled){
         try{onProgress('从缓存加载...',80);}catch(e){}
+        if(verbose) console.log('[MCJS] serving from cache:', version.id);
         loadGameInFrame(version,cached,mirrorURL,onProgress,onReady,onError);
         return;
       }
+      if(verbose && cacheDisabled) console.log('[MCJS] cache bypassed (disableCache):', version.id);
       // ===== 自动模式:并发竞速拉取多个镜像,最快可用者胜出(弱网优化) =====
       var raceWinner = null;
       var racePromise = null;
@@ -1177,21 +1211,20 @@ function launchGame(version,onProgress,onReady,onError,autoMode){
         // 收集插件注入项
         var pluginInjects = collectPluginInjects('launch:html', { version: version, mirrorURL: mirrorURL });
 
-        var scripts=[];
-        var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(settings.memoryLimit)+';';
-        scripts.push(memCode);
-        if(settings.saveIsolation){
-          var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
-          scripts.push(saveCode);
-        }
+        var scripts=buildLaunchScripts(settings, version);
         var modifiedHTML=injectIntoHTML(html,scripts,mirrorURL,pluginInjects);
-        try{onProgress('缓存游戏文件...',75);}catch(e){}
-        cacheGameFiles(version.id,modifiedHTML,mirrorURL).catch(function(e){
-          console.warn('[MCJS] Cache failed:',e);
-        });
+        if(settings.disableCache){
+          if(settings.verboseLog) console.log('[MCJS] Cache disabled by settings, skip write');
+        } else {
+          try{onProgress('缓存游戏文件...',75);}catch(e){}
+          cacheGameFiles(version.id,modifiedHTML,mirrorURL).catch(function(e){
+            console.warn('[MCJS] Cache failed:',e);
+          });
+        }
         loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady,onError);
       }).catch(function(err){
         console.warn('[MCJS] Mirror failed:',rawMirror.name,err);
+        if(verbose) console.log('[MCJS] primary mirror failed, racing fallback mirrors');
         tryFallbackMirror(version,0,onProgress,onReady,onError,err);
       });
     }).catch(function(err){
@@ -1206,7 +1239,8 @@ function launchGame(version,onProgress,onReady,onError,autoMode){
           } catch (e) {}
         }
         var pluginInjects = collectPluginInjects('launch:html', { version: version, mirrorURL: mirrorURL });
-        var modifiedHTML=injectIntoHTML(html,[],mirrorURL,pluginInjects);
+        var scripts=buildLaunchScripts(settings, version);
+        var modifiedHTML=injectIntoHTML(html,scripts,mirrorURL,pluginInjects);
         loadGameInFrame(version,modifiedHTML,mirrorURL,onProgress,onReady,onError);
       }).catch(function(err2){
         tryFallbackMirror(version,0,onProgress,onReady,onError,err2);
@@ -1272,13 +1306,7 @@ function tryFallbackMirror(version,startIndex,onProgress,onReady,onError,lastErr
   fetchGameHTMLRacing(candidateURLs, 15000).then(function(res){
     var winURL = res.url;
     var html = res.html;
-    var scripts=[];
-    var memCode='window.__MCJS_MEM_LIMIT__='+JSON.stringify(window.MCJS_SETTINGS.memoryLimit)+';';
-    scripts.push(memCode);
-    if(window.MCJS_SETTINGS.saveIsolation){
-      var saveCode='window.__MCJS_SAVE_ID__='+JSON.stringify(version.id)+';';
-      scripts.push(saveCode);
-    }
+    var scripts=buildLaunchScripts(window.MCJS_SETTINGS, version);
     var pluginInjects = collectPluginInjects('launch:html', { version: version, mirrorURL: winURL });
     var modifiedHTML=injectIntoHTML(html,scripts,winURL,pluginInjects);
     cacheGameFiles(version.id,modifiedHTML,winURL).catch(function(){});
@@ -1315,15 +1343,13 @@ function loadGameInFrame(version,html,mirrorURL,onProgress,onReady,onError){
   var iframe=document.createElement('iframe');
   iframe.id='gameFrame';
   iframe.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-pointer-lock allow-downloads');
+  iframe.setAttribute('allowfullscreen','');
+  iframe.setAttribute('webkitallowfullscreen','');
+  iframe.setAttribute('mozallowfullscreen','');
   iframe.style.cssText='width:100%;height:100%;border:none;background:transparent;display:block;';
 
-  var allowBits='autoplay; camera; microphone; gamepad; xr-spatial-tracking';
-  if(window.MCJS_SETTINGS.gpuPrefer==='high-performance'){
-    allowBits='fullscreen '+allowBits;
-  }
-  if(window.MCJS_SETTINGS.fullscreenLaunch){
-    allowBits='fullscreen '+allowBits;
-  }
+  // Permissions Policy: fullscreen 始终允许(全屏按钮需要),其余按设置
+  var allowBits='fullscreen; autoplay; camera; microphone; gamepad; xr-spatial-tracking';
   iframe.setAttribute('allow',allowBits);
 
   container.appendChild(iframe);
@@ -1381,12 +1407,33 @@ function loadGameInFrame(version,html,mirrorURL,onProgress,onReady,onError){
   setTimeout(function(){
     try{onReady();}catch(e){}
     if(window.MCJS_SETTINGS.fullscreenLaunch){
-      setTimeout(function(){
+      // 自动全屏:浏览器要求用户手势,启动完成后的直接请求大概率被拒,
+      // 失败则监听下一次用户手势(点击/按键/触摸)再请求——此时符合手势激活要求
+      var fsDone=false;
+      function requestFs(){
+        if(fsDone) return;
         try{
-          var req=iframe.requestFullscreen||iframe.webkitRequestFullscreen||iframe.mozRequestFullScreen||iframe.msRequestFullscreen;
-          if(req)req.call(iframe).catch(function(){});
+          var el=iframe;
+          var req=el.requestFullscreen||el.webkitRequestFullscreen||el.webkitEnterFullScreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+          if(!req) return;
+          var ret=req.call(el);
+          fsDone=true;
+          if(ret&&typeof ret.catch==='function'){
+            ret.catch(function(){ fsDone=false; });
+          }
         }catch(e){}
-      },400);
+      }
+      setTimeout(requestFs,300);
+      function onGesture(){
+        if(!fsDone) requestFs();
+      }
+      document.addEventListener('pointerdown',onGesture,{once:true});
+      document.addEventListener('keydown',onGesture,{once:true});
+      document.addEventListener('fullscreenchange',function(){
+        fsDone=true;
+        document.removeEventListener('pointerdown',onGesture);
+        document.removeEventListener('keydown',onGesture);
+      },{once:true});
     }
   },500);
 }

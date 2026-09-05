@@ -66,6 +66,10 @@ function ensureSettingsDefaults(s) {
 }
 
 var settings = ensureSettingsDefaults(window.MCJS_SETTINGS || {});
+// v1.5: 音量改为 0~100 百分比存储；旧版若存的是 0~1 小数则自动换算
+if (typeof settings.soundVolume === 'number' && settings.soundVolume > 0 && settings.soundVolume <= 1) {
+  settings.soundVolume = Math.round(settings.soundVolume * 100);
+}
 // 如果 window.MCJS_SETTINGS 存在但不完整，更新它
 if (window.MCJS_SETTINGS) {
   window.MCJS_SETTINGS = settings;
@@ -708,6 +712,9 @@ function startGameLaunch(ver, autoMode){
   var launchAuto = autoMode === true;
   
   if (settings.popupLaunch) {
+    // 弹窗模式：游戏在独立窗口运行，关闭镜像选择弹窗
+    launchModal.classList.remove('active');
+    if(sound) sound.close();
     launchInPopup(ver);
     return;
   }
@@ -750,6 +757,7 @@ function startGameLaunch(ver, autoMode){
         if(launchContent) launchContent.style.display = 'none';
         if(gameToolbar) gameToolbar.style.display = 'flex';
       }, 400);
+      try { startDebugOverlay(ver); } catch(e) {}
     },
     function(err){
       isLaunching = false;
@@ -804,6 +812,7 @@ function buildPopupHTML(ver){
   return '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n' +
     '<meta charset="UTF-8">\n' +
     '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+    '<base href="' + escapeHtml2(window.location.href.split('#')[0].split('?')[0].replace(/index\.html$/, '')) + '">\n' +
     '<title>' + escapeHtml2(ver.name) + ' - MCJS</title>\n' +
     '<style>\n' +
     '  * { margin:0; padding:0; box-sizing:border-box; }\n' +
@@ -822,6 +831,9 @@ function buildPopupHTML(ver){
     '<div id="gameContainer"></div>\n' +
     '<div id="popupLoader"><div class="ring"></div><div class="label">正在启动 ' + escapeHtml2(ver.name) + '...</div></div>\n' +
     '<div id="popupError"><div class="title">启动失败</div><div class="msg" id="popupErrorMsg"></div></div>\n' +
+    '<script src="./js/compat.js"></script>\n' +
+    '<script src="./js/plugin-api.js"></script>\n' +
+    '<script src="./js/plugin-registry.js"></script>\n' +
     '<script src="./js/game.js"></script>\n' +
     '<script>\n' +
     '(function(){\n' +
@@ -845,6 +857,23 @@ function buildPopupHTML(ver){
     '        function(){\n' +
     '          var loader = document.getElementById("popupLoader");\n' +
     '          if(loader) setTimeout(function(){ loader.classList.add("hidden"); }, 500);\n' +
+    '          if(window.MCJS_SETTINGS && window.MCJS_SETTINGS.fullscreenLaunch){\n' +
+    '            var fsDone=false;\n' +
+    '            function doFs(){\n' +
+    '              if(fsDone) return;\n' +
+    '              try{\n' +
+    '                var el=document.documentElement;\n' +
+    '                var req=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;\n' +
+    '                if(!req) return;\n' +
+    '                var ret=req.call(el); fsDone=true;\n' +
+    '                if(ret&&ret.catch) ret.catch(function(){ fsDone=false; });\n' +
+    '              }catch(e){}\n' +
+    '            }\n' +
+    '            setTimeout(doFs, 600);\n' +
+    '            function onGesture(){ if(!fsDone) doFs(); }\n' +
+    '            document.addEventListener("pointerdown", onGesture, {once:true});\n' +
+    '            document.addEventListener("keydown", onGesture, {once:true});\n' +
+    '          }\n' +
     '        },\n' +
     '        function(err){\n' +
     '          showError(err || "启动失败");\n' +
@@ -861,8 +890,41 @@ function buildPopupHTML(ver){
     '</body>\n</html>';
 }
 
+var _debugOverlayTimer = null;
+function stopDebugOverlay() {
+  if (_debugOverlayTimer) { clearInterval(_debugOverlayTimer); _debugOverlayTimer = null; }
+  var el = document.getElementById('mcjsDebugOverlay');
+  if (el) el.remove();
+}
+function startDebugOverlay(ver) {
+  stopDebugOverlay();
+  if (!settings.showDebugOverlay) return;
+  var container = document.getElementById('gameContainer');
+  if (!container) return;
+  var el = document.createElement('div');
+  el.id = 'mcjsDebugOverlay';
+  el.className = 'mcjs-debug-overlay';
+  container.appendChild(el);
+  var frames = 0, last = performance.now(), fps = 0;
+  function tick() {
+    frames++;
+    var now = performance.now();
+    if (now - last >= 1000) {
+      fps = Math.round(frames * 1000 / (now - last));
+      frames = 0; last = now;
+    }
+    var mem = '';
+    try { if (performance.memory) mem = ' 内存 ' + (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + 'MB'; } catch(e) {}
+    var fs = document.fullscreenElement ? '全屏' : '窗口';
+    el.textContent = 'FPS ' + fps + ' | ' + fs + mem + (ver ? ' | ' + ver.name : '');
+  }
+  _debugOverlayTimer = setInterval(tick, 500);
+  tick();
+}
+
 function cancelCurrentLaunch(){
   console.log('[MCJS] Cancelling launch...');
+  stopDebugOverlay();
   if (window.MCJS_GAME && window.MCJS_GAME.cancel) {
     window.MCJS_GAME.cancel();
   }
@@ -886,6 +948,7 @@ function cancelCurrentLaunch(){
 
 document.getElementById('gameCloseBtn').addEventListener('click', function(){
   if(sound) sound.close();
+  stopDebugOverlay();
   if (window.MCJS_GAME) window.MCJS_GAME.close();
   gameOverlay.classList.remove('active');
   if(launchContent) {
@@ -907,8 +970,15 @@ document.getElementById('gameFullscreenBtn').addEventListener('click', function(
   if(sound) sound.click();
   var container = document.getElementById('gameContainer');
   if(!container) return;
-  var req = container.requestFullscreen || container.webkitRequestFullscreen || container.mozRequestFullScreen || container.msRequestFullscreen;
-  if(req) req.call(container).catch(function(e){ console.warn('[MCJS] Fullscreen failed:', e); });
+  try {
+    var req = container.requestFullscreen || container.webkitRequestFullscreen || container.mozRequestFullScreen || container.msRequestFullscreen;
+    if(!req) { if(window.MCJS_TOAST) window.MCJS_TOAST('当前环境不支持全屏', 'warn'); return; }
+    var ret = req.call(container);
+    // 旧前缀方法返回 undefined,不能直接 .catch
+    if(ret && typeof ret.catch === 'function'){
+      ret.catch(function(e){ console.warn('[MCJS] Fullscreen failed:', e); });
+    }
+  } catch(e) { console.warn('[MCJS] Fullscreen failed:', e); }
 });
 
 document.getElementById('launchCancelBtn').addEventListener('click', function(){
@@ -1164,7 +1234,7 @@ function buildDebugPane() {
     stToggle('setVerbose', 'verboseLog', '详细日志', '输出所有加载步骤和钩子调用日志') +
     stToggle('setNoCache', 'disableCache', '禁用缓存', '每次启动重新下载游戏文件（测试用）') +
     stToggle('setFpsOverlay', 'showDebugOverlay', '调试浮层', '在游戏画面上显示 FPS 和性能信息') +
-    stToggle('setTestMode', 'testMode', '测试模式', '使用测试镜像和未发布版本')
+    stToggle('setTestMode', 'testMode', '测试模式', '开发调试预留（正式版不启用测试镜像）')
   );
 }
 
@@ -1272,17 +1342,10 @@ function bindSettingsControls(root) {
     r.addEventListener('input', function() {
       var key = r.getAttribute('data-key');
       var unit = r.getAttribute('data-unit') || '';
-      var val;
-      if (key === 'soundVolume') {
-        val = Math.round(parseInt(r.value, 10) / 100 * 100) / 100;
-        var pct = Math.round(val * 100);
-        var valEl = document.getElementById(r.id + 'Val');
-        if (valEl) valEl.textContent = pct + ' ' + unit;
-      } else {
-        val = parseInt(r.value, 10);
-        var valEl2 = document.getElementById(r.id + 'Val');
-        if (valEl2) valEl2.textContent = val + ' ' + unit;
-      }
+      // 所有滑杆均按滑块原始量纲存储(音量为 0~100 百分比,内存/缓存为 MB)
+      var val = parseInt(r.value, 10);
+      var valEl = document.getElementById(r.id + 'Val');
+      if (valEl) valEl.textContent = val + ' ' + unit;
       settingsDraft[key] = val;
       markSettingsDirty();
       applyLivePreview(key, val);
@@ -1460,6 +1523,12 @@ function saveSettingsFromModal() {
   settings = ensureSettingsDefaults(settingsDraft);
   window.MCJS_SETTINGS = settings;
   try { window.MCJS_SAVE_SETTINGS(settings); } catch (e) {}
+  // 触发插件钩子（hook 文档承诺了 settings:save）
+  try {
+    if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
+      window.MCJS_PLUGIN_API._internal.runHook('settings:save', settings);
+    }
+  } catch (e) {}
   applyAllSettings();
   clearSettingsDirty();
   settingsToast('设置已保存', 'success');
@@ -1546,6 +1615,11 @@ function openSettingsWindow() {
   if (!settingsModalEl) return;
   settingsDraft = Object.assign({}, ensureSettingsDefaults(settings || {}));
   clearSettingsDirty();
+  try {
+    if (window.MCJS_PLUGIN_API && window.MCJS_PLUGIN_API._internal) {
+      window.MCJS_PLUGIN_API._internal.runHook('settings:open', settingsDraft);
+    }
+  } catch (e) {}
   if (sound) { sound.unlock(); sound.open(); }
   renderSettingsPane('general');
   settingsModalEl.classList.add('active');

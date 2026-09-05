@@ -1297,4 +1297,16 @@
     /* internals */
     _activePlugins: function() { return Object.keys(_activePlugins); }
   };
+
+  /* 加载后自动恢复之前启用的插件(重建插件实例与钩子)。
+     浏览器扩展/弹窗等场景 localStorage 不可用时静默跳过。 */
+  try {
+    if (window.document && document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() { try { bootEnabled(); } catch (e) { console.warn('[MCJS] bootEnabled failed:', e); } });
+    } else {
+      bootEnabled();
+    }
+  } catch (e) {
+    try { bootEnabled(); } catch (e2) { console.warn('[MCJS] bootEnabled failed:', e2); }
+  }
 })();
