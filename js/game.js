@@ -559,6 +559,7 @@ var _memOptCancelToken = { cancelled: false };
 function cancelMemoryOpt(){
   _memOptCancelToken.cancelled = true;
 }
+// 在 game.js 中，修复 optimizeMemory 函数
 function optimizeMemory(callback, forceDetail){
   _memOptCancelToken = { cancelled: false };
   var settings = window.MCJS_SETTINGS || {};
@@ -578,7 +579,7 @@ function optimizeMemory(callback, forceDetail){
     { text: '就绪', pct: 100 }
   ];
 
-  // 如果 doClean 为 false，过滤掉 clean 步骤，但仍保留至少一个步骤
+  // 如果 doClean 为 false，过滤掉 clean 步骤
   if (!doClean) {
     steps = steps.filter(function(s) { return !s.clean; });
     if (steps.length === 0) {
@@ -589,11 +590,23 @@ function optimizeMemory(callback, forceDetail){
   var i = 0;
   var timeoutGuard = null;
   var finished = false;
+  var progressCalled = false; // 确保至少调用一次 onProgress
 
   function finish(err) {
     if (finished) return;
     finished = true;
     if (timeoutGuard) { clearTimeout(timeoutGuard); timeoutGuard = null; }
+    
+    // 确保调用 onProgress 到 100%
+    if (!progressCalled) {
+      try {
+        if (typeof window.MCJS_UPDATE_LAUNCH === 'function') {
+          window.MCJS_UPDATE_LAUNCH('就绪', 100);
+        }
+      } catch(e) {}
+      progressCalled = true;
+    }
+    
     try {
       if (callback) callback(err || null);
     } catch (e) {
@@ -607,6 +620,13 @@ function optimizeMemory(callback, forceDetail){
       return;
     }
     if (i >= steps.length) {
+      // 所有步骤完成，确保进度到 100%
+      try {
+        if (typeof window.MCJS_UPDATE_LAUNCH === 'function') {
+          window.MCJS_UPDATE_LAUNCH('就绪', 100);
+        }
+      } catch(e) {}
+      progressCalled = true;
       finish(null);
       return;
     }
@@ -639,7 +659,6 @@ function optimizeMemory(callback, forceDetail){
 
     // 计算延迟时间，确保至少有一个微小的延迟让 UI 更新
     var delay = doClean ? (120 + Math.random() * 200) : (80 + Math.random() * 80);
-    // 确保延迟不超过 500ms
     if (delay > 500) delay = 500;
     
     // 超时保护：如果 next 在 2 秒内没有被调用，强制推进
