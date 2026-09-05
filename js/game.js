@@ -561,63 +561,115 @@ function cancelMemoryOpt(){
 }
 function optimizeMemory(callback, forceDetail){
   _memOptCancelToken = { cancelled: false };
-  var settings=window.MCJS_SETTINGS||{};
-  var doClean=settings.autoClean!==false;
-  var showDetail=(forceDetail === true) || (settings.loadingDetail!==false);
+  var settings = window.MCJS_SETTINGS || {};
+  var doClean = (settings.autoClean !== false);
+  var showDetail = (forceDetail === true) || (settings.loadingDetail !== false);
 
-  var steps=showDetail?[
-    {text:'释放闲置内存...',pct:10,clean:true},
-    {text:'清理 DOM 缓存...',pct:25,clean:true},
-    {text:'优化 GC 堆...',pct:40,clean:true},
-    {text:'配置内存分配...',pct:55,alloc:true},
-    {text:'检测 GPU 性能...',pct:70},
-    {text:'准备运行环境...',pct:85},
-    {text:'就绪',pct:100}
-  ]:[
-    {text:'准备启动...',pct:50},
-    {text:'就绪',pct:100}
+  var steps = showDetail ? [
+    { text: '释放闲置内存...', pct: 10, clean: true },
+    { text: '清理 DOM 缓存...', pct: 25, clean: true },
+    { text: '优化 GC 堆...', pct: 40, clean: true },
+    { text: '配置内存分配...', pct: 55, alloc: true },
+    { text: '检测 GPU 性能...', pct: 70 },
+    { text: '准备运行环境...', pct: 85 },
+    { text: '就绪', pct: 100 }
+  ] : [
+    { text: '准备启动...', pct: 50 },
+    { text: '就绪', pct: 100 }
   ];
 
-  var i=0;
-  function next(){
-    if(_memOptCancelToken.cancelled){
-      if(callback){try{callback();}catch(e){}}
-      return;
-    }
-    if(i>=steps.length){
-      if(callback){try{callback();}catch(e){console.warn('[MCJS] optimizeMemory callback error:',e);}}
-      return;
-    }
-    var step=steps[i++];
-    try{
-      if(typeof window.MCJS_UPDATE_LAUNCH==='function'){
-        window.MCJS_UPDATE_LAUNCH(step.text,step.pct);
-      }
-    }catch(e){console.warn('[MCJS] launch update error:',e);}
-
-    try{
-      if(doClean&&step.clean&&step.pct<=25){
-        if(typeof gc==='function'){try{gc();}catch(e){}}
-        if(typeof window.gc==='function'){try{window.gc();}catch(e){}}
-      }
-      if(step.alloc){
-        var limit=settings.memoryLimit||512;
-        try{
-          var pool=new ArrayBuffer(Math.min(limit*1024*1024,256*1024*1024));
-          pool=null;
-        }catch(e){
-          console.warn('[MCJS] Memory pool allocation failed (non-fatal):',e.message);
-        }
-      }
-    }catch(e){
-      console.warn('[MCJS] optimizeMemory step error (non-fatal):',e);
-    }
-
-    if(!_memOptCancelToken.cancelled){
-      setTimeout(next,doClean?(200+Math.random()*300):(100+Math.random()*100));
+  // 如果 doClean 为 false，过滤掉 clean 步骤，但仍保留至少一个步骤
+  if (!doClean) {
+    steps = steps.filter(function(s) { return !s.clean; });
+    if (steps.length === 0) {
+      steps = [{ text: '准备启动...', pct: 50 }, { text: '就绪', pct: 100 }];
     }
   }
+
+  var i = 0;
+  var timeoutGuard = null;
+  var finished = false;
+
+  function finish(err) {
+    if (finished) return;
+    finished = true;
+    if (timeoutGuard) { clearTimeout(timeoutGuard); timeoutGuard = null; }
+    try {
+      if (callback) callback(err || null);
+    } catch (e) {
+      console.warn('[MCJS] optimizeMemory callback error:', e);
+    }
+  }
+
+  function next() {
+    if (_memOptCancelToken.cancelled) {
+      finish(new Error('cancelled'));
+      return;
+    }
+    if (i >= steps.length) {
+      finish(null);
+      return;
+    }
+    var step = steps[i++];
+    try {
+      if (typeof window.MCJS_UPDATE_LAUNCH === 'function') {
+        window.MCJS_UPDATE_LAUNCH(step.text, step.pct);
+      }
+    } catch (e) {
+      console.warn('[MCJS] launch update error:', e);
+    }
+
+    try {
+      if (doClean && step.clean && step.pct <= 40) {
+        if (typeof gc === 'function') { try { gc(); } catch (e) {} }
+        if (typeof window.gc === 'function') { try { window.gc(); } catch (e) {} }
+      }
+      if (step.alloc) {
+        var limit = settings.memoryLimit || 512;
+        try {
+          var pool = new ArrayBuffer(Math.min(limit * 1024 * 1024, 256 * 1024 * 1024));
+          pool = null;
+        } catch (e) {
+          console.warn('[MCJS] Memory pool allocation failed (non-fatal):', e.message);
+        }
+      }
+    } catch (e) {
+      console.warn('[MCJS] optimizeMemory step error (non-fatal):', e);
+    }
+
+    // 计算延迟时间，确保至少有一个微小的延迟让 UI 更新
+    var delay = doClean ? (120 + Math.random() * 200) : (80 + Math.random() * 80);
+    // 确保延迟不超过 500ms
+    if (delay > 500) delay = 500;
+    
+    // 超时保护：如果 next 在 2 秒内没有被调用，强制推进
+    if (timeoutGuard) { clearTimeout(timeoutGuard); }
+    timeoutGuard = setTimeout(function() {
+      console.warn('[MCJS] optimizeMemory step timeout, forcing next');
+      timeoutGuard = null;
+      if (!finished) next();
+    }, 2000);
+
+    if (!_memOptCancelToken.cancelled) {
+      setTimeout(function() {
+        if (timeoutGuard) { clearTimeout(timeoutGuard); timeoutGuard = null; }
+        if (!finished) next();
+      }, Math.max(delay, 50));
+    } else {
+      finish(new Error('cancelled'));
+    }
+  }
+
+  // 启动优化流程
   next();
+
+  // 全局超时保护：如果 30 秒后还未完成，强制完成
+  setTimeout(function() {
+    if (!finished) {
+      console.warn('[MCJS] optimizeMemory global timeout, forcing completion');
+      finish(new Error('timeout'));
+    }
+  }, 30000);
 }
 
 /* ========== 手动内存优化（外部调用） ========== */
