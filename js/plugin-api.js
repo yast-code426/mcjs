@@ -37,8 +37,25 @@
 
   if (window.MCJS_PLUGIN_API) return;
 
+  /* ===== Event Bus ===== */
+  var _listeners = {};
+  function on(eventName, fn) {
+    if (!_listeners[eventName]) _listeners[eventName] = [];
+    _listeners[eventName].push(fn);
+    return function() {
+      _listeners[eventName] = (_listeners[eventName] || []).filter(function(f) { return f !== fn; });
+    };
+  }
+  function emit(eventName, payload) {
+    var list = _listeners[eventName];
+    if (!list) return;
+    list.slice().forEach(function(fn) {
+      try { fn(payload); } catch (e) { console.error('[MCJS Plugin] Event error in', eventName, ':', e); }
+    });
+  }
+
   /* ===== Hook System ===== */
-  var _hooks = {}; // hookName -> [{pluginId, fn, priority}]
+  var _hooks = {};
   var _validHookPoints = {};
   (window.MCJS_HOOK_POINTS || []).forEach(function(hp) { _validHookPoints[hp.name] = true; });
 
@@ -116,23 +133,6 @@
       }
     }
     return results;
-  }
-
-  /* ===== Event Bus ===== */
-  var _listeners = {};
-  function on(eventName, fn) {
-    if (!_listeners[eventName]) _listeners[eventName] = [];
-    _listeners[eventName].push(fn);
-    return function() {
-      _listeners[eventName] = (_listeners[eventName] || []).filter(function(f) { return f !== fn; });
-    };
-  }
-  function emit(eventName, payload) {
-    var list = _listeners[eventName];
-    if (!list) return;
-    list.slice().forEach(function(fn) {
-      try { fn(payload); } catch (e) { console.error('[MCJS Plugin] Event error in', eventName, ':', e); }
-    });
   }
 
   /* ===== Settings (per-plugin) ===== */
@@ -309,7 +309,6 @@
 
     /* 启动前修改 - 修改启动参数 */
     launchContext: {
-      // 当前启动的版本信息(只在启动过程中可用)
       getCurrent: function() {
         return window.MCJS_LAUNCH_CONTEXT || null;
       }
@@ -318,4 +317,68 @@
     /* Registry - 列出/查询其他插件 */
     plugins: {
       list: function() {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+        if (window.MCJS_REGISTRY && window.MCJS_REGISTRY.list) {
+          return window.MCJS_REGISTRY.list();
+        }
+        return [];
+      },
+      isInstalled: function(id) {
+        if (window.MCJS_REGISTRY && window.MCJS_REGISTRY.isInstalled) {
+          return window.MCJS_REGISTRY.isInstalled(id);
+        }
+        return false;
+      },
+      get: function(id) {
+        if (window.MCJS_REGISTRY && window.MCJS_REGISTRY.get) {
+          return window.MCJS_REGISTRY.get(id);
+        }
+        return null;
+      }
+    },
+
+    /* Logger */
+    log: function(pluginId) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      log(pluginId, 'info', args);
+    },
+    warn: function(pluginId) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      log(pluginId, 'warn', args);
+    },
+    error: function(pluginId) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      log(pluginId, 'error', args);
+    }
+  };
+
+  /* ===== Internal API for registry ===== */
+  var internal = {
+    registerHook: registerHook,
+    unregisterHooks: unregisterPluginHooks,
+    runHook: runHook,
+    runHookAll: runHookAll,
+    hasHook: hasHook,
+    listHooks: listHooks,
+    getValidHookPoints: function() { return window.MCJS_HOOK_POINTS || []; }
+  };
+
+  /* 将 api 暴露给插件,也暴露内部接口供 registry 使用 */
+  window.MCJS_PLUGIN_API = api;
+  window.MCJS_PLUGIN_API._internal = internal;
+
+  /* 暴露事件总线给其他模块 */
+  window.MCJS_EVENTS = {
+    on: on,
+    emit: emit
+  };
+
+  console.log('[MCJS] Plugin API v1.0 loaded');
+
+  /* ===== 兼容:旧版钩子注册方式 ===== */
+  window.MCJS_HOOKS = {
+    register: registerHook,
+    unregister: unregisterPluginHooks,
+    run: runHook
+  };
+
+})();

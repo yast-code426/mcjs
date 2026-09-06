@@ -1,4 +1,4 @@
-﻿/* MCJS Plugin Registry v1.0
+﻿﻿/* MCJS Plugin Registry v1.0
    - 插件注册表:安装/卸载/启用/禁用
    - 官方插件库(内置)
    - 加载/执行/沙箱
@@ -11,18 +11,15 @@
   var STORAGE_KEY = 'mcjs_installed_plugins';
   var REMOTES_KEY = 'mcjs_plugin_remotes';
   var OFFICIAL_ENABLED_KEY = 'mcjs_official_enabled';
-  var API = window.MCJS_PLUGIN_API;
+  
+  // 安全获取 API
+  var API = window.MCJS_PLUGIN_API || { PERMS: {} };
+  
+  if (!window.MCJS_PLUGIN_API) {
+    console.warn('[MCJS] Plugin API not ready at registry init, will retry later');
+  }
 
-  /* ===== Remote / Open Plugin System =====
-     - 远程仓库(remotes):可加载第三方插件市场
-     - 仓库协议: JSON manifest,包含 plugins[] + signature(可选)
-     - 签名:基于文本内容的 SHA-256(开发期),或 RSA-PSS(发布期)
-     - 第三方市场:用户可注册任意 https 仓库,信任级别由用户选择
-  */
-
-  /* Built-in remote repositories (用户自行添加)
-     - 默认不带任何远端仓库:用户自己加 URL,或用本地文件导入
-     - 启动器不内嵌任何官方/社区远端(避免引用不存在的 repo) */
+  /* ===== Remote / Open Plugin System ===== */
   var DEFAULT_REMOTES = [];
 
   /* Remote registry state */
@@ -70,7 +67,6 @@
     var idx = list.findIndex(function(x) { return x.id === id; });
     if (idx === -1) throw new Error('远程仓库不存在: ' + id);
     if (list[idx].builtin && patch.url) {
-      // 内置仓库只允许改 trust / enabled
       list[idx] = Object.assign({}, list[idx], { trust: patch.trust || list[idx].trust });
     } else {
       list[idx] = Object.assign({}, list[idx], patch);
@@ -85,16 +81,8 @@
     updateRemote(id, { enabled: r.enabled });
   }
 
-  /* ===== Signature Verification =====
-     支持两种签名:
-     1) SHA-256: 把 plugin JSON (除 signature 字段) 做 SHA-256, 与 signature 比对
-        简单实用,适合内部分发;防止传输中被篡改,但不能验证作者身份
-     2) RSA-PSS: 基于 Web Crypto SubtleCrypto
-        signature 算法: 'RSASSA-PKCS1-v1_5' + SHA-256
-        适合公开发布,需要公钥
-  */
+  /* ===== Signature Verification ===== */
   function _stringifyForHash(plugin) {
-    // 移除 signature 字段,规范化 JSON
     var p = Object.assign({}, plugin);
     delete p.signature;
     delete p.signatureType;
@@ -127,7 +115,6 @@
             provided: plugin.signature
           });
         } else if (type === 'rsa-sha256' && plugin.publicKey) {
-          // RSA-PSS / PKCS#1 v1.5 with SHA-256
           return importPublicKey(plugin.publicKey).then(function(key) {
             return crypto.subtle.verify(
               { name: 'RSASSA-PKCS1-v1_5' },
@@ -194,7 +181,6 @@
     });
   }
 
-  /* Cached remote plugin catalog (in-memory, 5 min) */
   var _remoteCache = {};
   function getCachedCatalog(remoteId) {
     return _remoteCache[remoteId] || null;
@@ -214,7 +200,6 @@
   /* ===== Import plugin from URL / manifest ===== */
   function importFromURL(url) {
     return fetchRemoteManifest(url).then(function(manifest) {
-      // manifest 可能是单个插件,或包含 plugins 数组
       var plugins = [];
       if (manifest.plugins && Array.isArray(manifest.plugins)) {
         plugins = manifest.plugins;
@@ -228,10 +213,8 @@
   }
 
   function installRemotePlugin(remoteId, pluginEntry) {
-    // pluginEntry 形如 { id, version, url|code, ... }
     if (!pluginEntry || !pluginEntry.id) throw new Error('插件缺少 id');
     return fetchPluginPackage(remoteId, pluginEntry).then(function(manifest) {
-      // 签名校验(如果有)
       var verifyPromise = manifest.signature
         ? verifyPluginSignature(manifest).then(function(v) {
             if (!v.ok && (!pluginEntry.trust || pluginEntry.trust === 'untrusted')) {
@@ -248,7 +231,6 @@
           signatureVerified: v.ok,
           installedAt: Date.now()
         });
-        // 安装(覆盖本地副本),不自动启用
         install(plugin);
         return plugin;
       });
@@ -275,7 +257,6 @@
     return 0;
   }
 
-  /* 检查某个已安装插件是否有更新(从其 remote) */
   function checkUpdate(pluginId) {
     var plugin = getPlugin(pluginId);
     if (!plugin) return Promise.reject(new Error('插件不存在: ' + pluginId));
@@ -316,14 +297,10 @@
     });
   }
 
-  /* ===== Built-in / Official Plugins =====
-     这些插件"内置"在启动器中,默认全部禁用,需要用户从插件市场手动启用
-     这就是 v1.4 的核心改动:所有注入选项(包括原 WASM polyfill)都通过插件启用 */
-
+  /* ===== Built-in / Official Plugins ===== */
   function builtinWasmPolyfill() {
     return {
       inject: function(ctx) {
-        // 这是原 game.js 中的 buildWasmPolyfillScript() 改造而来
         return {
           type: 'js',
           content: [
@@ -823,7 +800,7 @@
     };
   }
 
-  /* Official plugin definitions (the "marketplace" content) */
+  /* Official plugin definitions */
   var OFFICIAL_PLUGINS = [
     {
       id: 'mcjs.wasm-polyfill',
@@ -1067,7 +1044,7 @@
     }
   ];
 
-  /* ===== Local user-installed plugins (custom / third-party) ===== */
+  /* ===== Local user-installed plugins ===== */
   function getInstalledState() {
     try {
       var s = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -1078,7 +1055,7 @@
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) {}
   }
 
-  /* ===== Official plugin enabled state (持久化) ===== */
+  /* ===== Official plugin enabled state ===== */
   function getOfficialEnabled() {
     try {
       var s = JSON.parse(localStorage.getItem(OFFICIAL_ENABLED_KEY) || '{}');
@@ -1090,8 +1067,8 @@
   }
 
   /* Registry state */
-  var _activePlugins = {};  // pluginId -> instance
-  var _enabledPlugins = {}; // pluginId -> boolean (仅对"已安装"生效)
+  var _activePlugins = {};
+  var _enabledPlugins = {};
 
   function getPlugin(id) {
     var builtin = OFFICIAL_PLUGINS.find(function(p) { return p.id === id; });
@@ -1127,7 +1104,6 @@
     if (state[id]) return state[id].enabled !== false;
     var builtin = OFFICIAL_PLUGINS.find(function(p) { return p.id === id; });
     if (builtin) {
-      // 官方插件从持久化表读 enabled
       var off = getOfficialEnabled();
       return off[id] === true;
     }
@@ -1153,7 +1129,6 @@
 
   function uninstall(id) {
     if (OFFICIAL_PLUGINS.find(function(p) { return p.id === id; })) {
-      // 官方插件只能禁用,不能卸载
       return disable(id);
     }
     disable(id);
@@ -1169,7 +1144,6 @@
     if (!plugin) throw new Error('Plugin not found: ' + id);
     _enabledPlugins[id] = true;
     if (plugin.source === 'official') {
-      // 官方插件:持久化 enabled 状态
       var off = getOfficialEnabled();
       off[id] = true;
       saveOfficialEnabled(off);
@@ -1233,7 +1207,6 @@
     if (window.__MCJS_PLUGIN_INSTANCES__) delete window.__MCJS_PLUGIN_INSTANCES__[id];
   }
 
-  /* Collect pending injects (legacy compat — returns empty, injects are now collected directly) */
   function consumeInjects() {
     return [];
   }
@@ -1246,7 +1219,6 @@
         try { enable(id); } catch (e) { console.warn('[MCJS] Failed to re-enable', id, e); }
       }
     });
-    // 官方插件:从持久化表恢复 enabled 状态
     var off = getOfficialEnabled();
     Object.keys(off).forEach(function(id) {
       if (off[id] === true) {
@@ -1256,22 +1228,18 @@
   }
 
   window.MCJS_REGISTRY = {
-    /* list / query */
     list: list,
     listOfficial: listOfficial,
     listUserInstalled: listUserInstalled,
     get: getPlugin,
     isInstalled: isInstalled,
     isEnabled: isEnabled,
-    /* lifecycle */
     install: install,
     uninstall: uninstall,
     enable: enable,
     disable: disable,
     bootEnabled: bootEnabled,
-    /* injects */
     consumeInjects: consumeInjects,
-    /* remotes */
     remotes: {
       list: getRemotes,
       get: getRemoteById,
@@ -1284,6 +1252,16 @@
       getCached: getCachedCatalog,
       clearCache: clearRemoteCache
     },
-    /* remote plugin ops */
     importFromURL: importFromURL,
-    instal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+    installRemote: installRemotePlugin,
+    checkUpdate: checkUpdate,
+    checkAllUpdates: checkAllUpdates,
+    update: updatePlugin
+  };
+
+  /* Boot after a small delay to let other modules load */
+  setTimeout(function() {
+    try { bootEnabled(); } catch (e) { console.warn('[MCJS] Plugin boot error:', e); }
+  }, 500);
+
+})();

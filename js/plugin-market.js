@@ -15,9 +15,10 @@
     searchQuery: '',
     activeCategory: 'all',
     activeTab: 'browse',
-    activeRemoteId: null,        // 当前远程仓库 id(null = 内置+已安装)
-    remoteCatalog: {},           // remoteId -> { plugins: [], cachedAt }
-    loadingRemote: false
+    activeRemoteId: null,
+    remoteCatalog: {},
+    loadingRemote: false,
+    _initRetries: 0
   };
 
   /* ===== Helpers ===== */
@@ -43,7 +44,6 @@
     })[cat] || cat;
   }
   function categoryTag(cat) {
-    // 纯文字标签(无 emoji),适配深浅主题
     return ({
       compatibility: 'COMPAT',
       performance: 'PERF',
@@ -59,10 +59,37 @@
     return String(n);
   }
 
+  function isRegistryReady() {
+    return window.MCJS_REGISTRY && typeof window.MCJS_REGISTRY.list === 'function';
+  }
+
+  function waitForRegistry(callback, retries) {
+    retries = retries || 0;
+    if (retries > 30) {
+      console.warn('[MCJS] Registry timeout, giving up');
+      callback();
+      return;
+    }
+    if (isRegistryReady()) {
+      Registry = window.MCJS_REGISTRY;
+      callback();
+      return;
+    }
+    setTimeout(function() {
+      waitForRegistry(callback, retries + 1);
+    }, 100);
+  }
+
   /* ===== Render: Plugin Card ===== */
   function renderPluginCard(plugin) {
-    var installed = Registry.isInstalled(plugin.id);
-    var enabled = Registry.isEnabled(plugin.id);
+    if (!plugin || !plugin.id) return document.createElement('div');
+    var installed = false;
+    var enabled = false;
+    try {
+      installed = Registry.isInstalled(plugin.id);
+      enabled = Registry.isEnabled(plugin.id);
+    } catch (e) {}
+    
     var card = el(
       '<div class="plugin-card" data-id="' + escapeHtml(plugin.id) + '" data-category="' + escapeHtml(plugin.category || 'custom') + '">' +
         '<div class="plugin-card-header">' +
@@ -111,6 +138,10 @@
 
   function handlePluginAction(plugin, act, btn) {
     try {
+      if (!isRegistryReady()) {
+        if (window.MCJS_TOAST) window.MCJS_TOAST('插件系统未就绪，请刷新页面', 'error');
+        return;
+      }
       if (act === 'enable') {
         Registry.enable(plugin.id);
         if (window.MCJS_TOAST) window.MCJS_TOAST('已启用: ' + plugin.name, 'success');
@@ -127,7 +158,7 @@
       } else if (act === 'uninstall') {
         if (!confirm('确定卸载 "' + plugin.name + '" 吗?\n该插件的设置和数据将一并清除。')) return;
         Registry.uninstall(plugin.id);
-        API.storage.clear(plugin.id);
+        if (API && API.storage) API.storage.clear(plugin.id);
         if (window.MCJS_TOAST) window.MCJS_TOAST('已卸载: ' + plugin.name, 'info');
         renderAll();
       } else if (act === 'details') {
@@ -140,11 +171,13 @@
   }
 
   function showPluginDetails(plugin) {
+    if (!plugin) return;
     var perms = (plugin.permissions || []).map(function(p) {
-      return '<li><code>' + escapeHtml(p) + '</code> - ' + escapeHtml(API.PERMS[p] || '未知权限') + '</li>';
+      var desc = (API && API.PERMS) ? (API.PERMS[p] || '未知权限') : '未知权限';
+      return '<li><code>' + escapeHtml(p) + '</code> - ' + escapeHtml(desc) + '</li>';
     }).join('');
     var hooks = (plugin.hooks || []).map(function(h) {
-      var desc = (window.MCJS_HOOK_POINTS.find(function(x) { return x.name === h; }) || {}).desc || '';
+      var desc = (window.MCJS_HOOK_POINTS && window.MCJS_HOOK_POINTS.find(function(x) { return x.name === h; }) || {}).desc || '';
       return '<li><code>' + escapeHtml(h) + '</code>' + (desc ? ' - ' + escapeHtml(desc) : '') + '</li>';
     }).join('');
 
@@ -182,10 +215,20 @@
   function renderBrowsePane() {
     var listEl = document.getElementById('pluginList');
     if (!listEl) return;
+    
+    if (!isRegistryReady()) {
+      listEl.innerHTML = '<div class="empty-state"><p>插件系统加载中...</p></div>';
+      setTimeout(renderBrowsePane, 200);
+      return;
+    }
+    
     listEl.innerHTML = '';
-    var plugins = Registry.list();
+    var plugins = [];
+    try { plugins = Registry.list(); } catch (e) { plugins = []; }
+    
     var q = _state.searchQuery.toLowerCase().trim();
     var filtered = plugins.filter(function(p) {
+      if (!p || !p.id) return false;
       if (_state.activeCategory !== 'all' && p.category !== _state.activeCategory) return false;
       if (q && (p.name.toLowerCase().indexOf(q) === -1 && (p.description || '').toLowerCase().indexOf(q) === -1 && (p.author || '').toLowerCase().indexOf(q) === -1)) return false;
       return true;
@@ -202,10 +245,20 @@
   function renderInstalledPane() {
     var listEl = document.getElementById('installedPluginList');
     if (!listEl) return;
+    
+    if (!isRegistryReady()) {
+      listEl.innerHTML = '<div class="empty-state"><p>插件系统加载中...</p></div>';
+      return;
+    }
+    
     listEl.innerHTML = '';
-    var plugins = Registry.list().filter(function(p) {
-      return Registry.isInstalled(p.id);
-    });
+    var plugins = [];
+    try {
+      plugins = Registry.list().filter(function(p) {
+        return p && Registry.isInstalled(p.id);
+      });
+    } catch (e) { plugins = []; }
+    
     if (plugins.length === 0) {
       listEl.innerHTML =
         '<div class="empty-state">' +
@@ -234,6 +287,10 @@
   }
 
   function checkAllUpdatesUI() {
+    if (!isRegistryReady()) {
+      if (window.MCJS_TOAST) window.MCJS_TOAST('插件系统未就绪', 'error');
+      return;
+    }
     if (window.MCJS_TOAST) window.MCJS_TOAST('正在检查所有更新...', 'info');
     Registry.checkAllUpdates().then(function(updates) {
       _updatesCache = updates || [];
@@ -287,15 +344,21 @@
   function renderRemotePane() {
     var listEl = document.getElementById('remotePluginList');
     if (!listEl) return;
+    
+    if (!isRegistryReady()) {
+      listEl.innerHTML = '<div class="empty-state"><p>插件系统加载中...</p></div>';
+      return;
+    }
+    
     listEl.innerHTML = '';
 
-    // 渲染仓库源选择器
     var sourceContainer = document.getElementById('remoteSourceSelector');
     if (sourceContainer) {
       sourceContainer.innerHTML = '';
-      var remotes = Registry.remotes.list();
+      var remotes = [];
+      try { remotes = Registry.remotes.list(); } catch (e) { remotes = []; }
       remotes.forEach(function(r) {
-        var isActive = (_state.activeRemoteId || remotes[0].id) === r.id;
+        var isActive = (_state.activeRemoteId || remotes[0] && remotes[0].id) === r.id;
         var chip = el(
           '<button class="plugin-chip ' + (isActive ? 'active' : '') + '" data-remote="' + escapeHtml(r.id) + '">' +
             escapeHtml(r.name) +
@@ -308,13 +371,11 @@
         });
         sourceContainer.appendChild(chip);
       });
-      // "+ 添加仓库" 按钮
       var addBtn = el('<button class="plugin-chip" id="addRemoteBtn">添加仓库</button>');
       addBtn.addEventListener('click', showAddRemoteDialog);
       sourceContainer.appendChild(addBtn);
     }
 
-    // 加载并渲染当前选中的仓库
     var activeId = _state.activeRemoteId || (Registry.remotes.list()[0] || {}).id;
     if (!activeId) {
       listEl.innerHTML = '<div class="empty-state"><p>未配置任何远程仓库</p></div>';
@@ -344,6 +405,7 @@
     listEl.innerHTML = '';
     var q = _state.searchQuery.toLowerCase().trim();
     var filtered = cat.plugins.filter(function(p) {
+      if (!p || !p.id) return false;
       if (_state.activeCategory !== 'all' && p.category !== _state.activeCategory) return false;
       if (q && (p.name.toLowerCase().indexOf(q) === -1 && (p.description || '').toLowerCase().indexOf(q) === -1)) return false;
       return true;
@@ -358,7 +420,9 @@
   }
 
   function renderRemotePluginCard(p, remoteId) {
-    var installed = Registry.isInstalled(p.id);
+    var installed = false;
+    try { installed = Registry.isInstalled(p.id); } catch (e) {}
+    
     var card = el(
       '<div class="plugin-card" data-id="' + escapeHtml(p.id) + '">' +
         '<div class="plugin-card-header">' +
@@ -387,10 +451,9 @@
         var act = btn.getAttribute('data-act');
         if (act === 'installRemote' || act === 'updateRemote') {
           if (window.MCJS_TOAST) window.MCJS_TOAST('正在从远程安装 ' + p.name + '...', 'info');
-          // 从 catalog 找完整条目(包含 url)
           var cat = _state.remoteCatalog[remoteId];
           var fullEntry = (cat && cat.plugins || []).find(function(x) { return x.id === p.id; }) || p;
-          Registry.installRemote(remoteId, fullEntry).then(function(installed) {
+          Registry.installRemote(remoteId, fullEntry).then(function() {
             if (window.MCJS_TOAST) window.MCJS_TOAST('已安装: ' + p.name, 'success');
             renderAll();
           }).catch(function(e) {
@@ -418,6 +481,10 @@
   }
 
   function showAddRemoteDialog() {
+    if (!isRegistryReady()) {
+      if (window.MCJS_TOAST) window.MCJS_TOAST('插件系统未就绪', 'error');
+      return;
+    }
     var url = prompt('远程仓库 URL(JSON manifest 地址):');
     if (!url) return;
     var name = prompt('仓库名称:', '我的仓库');
@@ -441,13 +508,16 @@
 
   /* ===== URL Import ===== */
   function importFromURL(url) {
+    if (!isRegistryReady()) {
+      if (window.MCJS_TOAST) window.MCJS_TOAST('插件系统未就绪', 'error');
+      return;
+    }
     if (window.MCJS_TOAST) window.MCJS_TOAST('正在从 URL 加载: ' + url, 'info');
     Registry.importFromURL(url).then(function(result) {
       if (!result.plugins.length) {
         if (window.MCJS_TOAST) window.MCJS_TOAST('URL 中没有找到插件', 'warning');
         return;
       }
-      // 弹出让用户选择要安装哪些
       showURLImportPicker(result);
     }).catch(function(e) {
       if (window.MCJS_TOAST) window.MCJS_TOAST('加载失败: ' + e.message, 'error');
@@ -511,9 +581,7 @@
         return;
       }
       var p = plugins.shift();
-      // 用一个临时 remote id 来走 installRemote 流程
       var tempRemoteId = 'url-import-' + Date.now().toString(36);
-      // 把 source url 注入到条目里
       var entry = Object.assign({}, p, { url: sourceUrl });
       Registry.installRemote(tempRemoteId, entry).then(function() {
         done++;
@@ -565,7 +633,6 @@
     } else if (_state.activeTab === 'remote') {
       renderRemotePane();
     } else if (_state.activeTab === 'docs') {
-      // docs 由 app.js 的 buildPluginDocsHTML 渲染
       if (window.MCJS_DOCS_RENDER) window.MCJS_DOCS_RENDER();
       else {
         var c = document.getElementById('pluginDocsContainer');
@@ -575,12 +642,15 @@
   }
 
   function renderAll() {
+    if (!isRegistryReady()) {
+      setTimeout(renderAll, 200);
+      return;
+    }
     renderCategories();
     renderActivePane();
     renderTabCounts();
   }
 
-  // tab 计数徽章：已安装数 / 可更新数（更新数异步刷新）
   var _updatesCache = [];
   function renderTabCounts() {
     var modal = document.getElementById('pluginMarketModal');
@@ -602,12 +672,16 @@
     }
     var installedCount = 0;
     try {
-      installedCount = Registry.list().filter(function(p) { return Registry.isInstalled(p.id); }).length;
+      if (isRegistryReady()) {
+        installedCount = Registry.list().filter(function(p) { return Registry.isInstalled(p.id); }).length;
+      }
     } catch (e) {}
     setCount('installed', installedCount);
     setCount('updates', _updatesCache.length);
   }
+
   function refreshUpdateCounts() {
+    if (!isRegistryReady()) return;
     if (!Registry.checkAllUpdates) return;
     Registry.checkAllUpdates().then(function(updates) {
       _updatesCache = updates || [];
@@ -619,10 +693,13 @@
   function open() {
     var modal = document.getElementById('pluginMarketModal');
     if (!modal) return;
-    renderAll();
-    refreshUpdateCounts();
-    modal.classList.add('active');
+    waitForRegistry(function() {
+      renderAll();
+      refreshUpdateCounts();
+      modal.classList.add('active');
+    });
   }
+  
   function close() {
     var modal = document.getElementById('pluginMarketModal');
     if (modal) modal.classList.remove('active');
@@ -630,6 +707,10 @@
 
   /* ===== Import plugin (file input) ===== */
   function importFromFile() {
+    if (!isRegistryReady()) {
+      if (window.MCJS_TOAST) window.MCJS_TOAST('插件系统未就绪', 'error');
+      return;
+    }
     var input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json,.mcjs-plugin,application/json';
@@ -649,7 +730,6 @@
           if (!plugin.code && !plugin.builtin) {
             throw new Error('插件必须包含 code 或 builtin 字段');
           }
-          // 如果 builtin 字段存在,提示用户
           Registry.install(plugin);
           if (window.MCJS_TOAST) window.MCJS_TOAST('插件已导入,请手动启用: ' + plugin.name, 'success');
           renderAll();
@@ -667,7 +747,6 @@
     var modal = document.getElementById('pluginMarketModal');
     if (!modal) return;
 
-    // 委托音效:点击/hover 触发 sound
     modal.addEventListener('click', function(e){
       try {
         if (window.MCJS && window.MCJS.sound) window.MCJS.sound.click();
@@ -692,7 +771,6 @@
         tabs.forEach(function(t) { t.classList.remove('active'); });
         tab.classList.add('active');
         _state.activeTab = tab.getAttribute('data-tab');
-        // 切换 pane
         modal.querySelectorAll('.plugin-pane').forEach(function(p) { p.classList.remove('active'); });
         var pane = modal.querySelector('.plugin-pane[data-pane="' + _state.activeTab + '"]');
         if (pane) pane.classList.add('active');
@@ -745,6 +823,24 @@
     }
   }
 
+  /* ===== Cross-Component State Sync ===== */
+  function bindStateSync() {
+    if (!window.MCJS_EVENTS) {
+      setTimeout(bindStateSync, 200);
+      return;
+    }
+    var evts = ['plugin:enable', 'plugin:disable', 'plugin:install', 'plugin:uninstall', 'plugin:updated', 'remote:add', 'remote:remove'];
+    evts.forEach(function(name) {
+      window.MCJS_EVENTS.on(name, function() {
+        var modal = document.getElementById('pluginMarketModal');
+        if (modal && modal.classList.contains('active')) {
+          renderActivePane();
+        }
+        if (modal && modal.classList.contains('active')) renderCategories();
+      });
+    });
+  }
+
   /* ===== Public API ===== */
   window.MCJS_PLUGIN_MARKET = {
     open: open,
@@ -755,31 +851,15 @@
 
   // Bind on DOM ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindEvents);
+    document.addEventListener('DOMContentLoaded', function() {
+      bindEvents();
+      setTimeout(bindStateSync, 300);
+    });
   } else {
-    setTimeout(bindEvents, 0);
+    setTimeout(function() {
+      bindEvents();
+      setTimeout(bindStateSync, 300);
+    }, 0);
   }
 
-  /* ===== Cross-Component State Sync =====
-     当外部(如主页面 installed-pill 区域)改了插件状态,这里也需要重渲染 */
-  function bindStateSync() {
-    if (!window.MCJS_EVENTS) return;
-    var evts = ['plugin:enable', 'plugin:disable', 'plugin:install', 'plugin:uninstall', 'plugin:updated', 'remote:add', 'remote:remove'];
-    evts.forEach(function(name) {
-      window.MCJS_EVENTS.on(name, function() {
-        // 弹窗已打开时,刷新当前可见 pane
-        var modal = document.getElementById('pluginMarketModal');
-        if (modal && modal.classList.contains('active')) {
-          renderActivePane();
-        }
-        // 顺便刷新一次分类条(状态条数会变)
-        if (modal && modal.classList.contains('active')) renderCategories();
-      });
-    });
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindStateSync);
-  } else {
-    setTimeout(bindStateSync, 0);
-  }
 })();

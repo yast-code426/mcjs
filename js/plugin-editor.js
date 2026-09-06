@@ -26,7 +26,8 @@
       hooks: [],
       permissions: []
     },
-    _initialized: false
+    _initialized: false,
+    _dirty: false
   };
 
   /* ===== Templates ===== */
@@ -38,7 +39,7 @@
         hooks: ['launch:html'],
         permissions: ['game.inject']
       },
-      main: '// 插件入口 - 此文件可选,主要用于主逻辑\n// 大多数简单插件可以直接在 inject.js 写代码\nexport default function(api) {\n  console.log("[MyPlugin] Loaded");\n  return { onLaunch: () => {} };\n}\n',
+      main: '// 插件入口 - 此文件可选,主要用于主逻辑\n// 大多数简单插件可以直接在 inject.js 写代码\nexport default function(api) {\n  console.log("[MyPlugin] Loaded");\n  return { onLaunch: function() {} };\n}\n',
       inject: '// 此脚本会在游戏 iframe 加载前注入到游戏 HTML 的 <head> 中\n(function(){\n  console.log("[MyPlugin] Injected into game page");\n  // 你的游戏注入代码...\n})();\n',
       style: '/* 此 CSS 会注入到游戏页面 */\n.my-plugin-marker { color: red; }\n',
       manifest: '{\n  "id": "my.inject-plugin",\n  "name": "我的注入插件",\n  "version": "1.0.0",\n  "author": "Your Name",\n  "category": "utility",\n  "description": "插件描述",\n  "hooks": ["launch:html"],\n  "permissions": ["game.inject"],\n  "code": ""\n}\n'
@@ -150,10 +151,12 @@
         } else {
           _state.meta.hooks = _state.meta.hooks.filter(function(x) { return x !== h.id; });
         }
+        _state._dirty = true;
       });
       container.appendChild(item);
     });
   }
+
   function renderPermissionList() {
     var container = document.getElementById('permissionList');
     if (!container) return;
@@ -172,6 +175,7 @@
         } else {
           _state.meta.permissions = _state.meta.permissions.filter(function(x) { return x !== p.id; });
         }
+        _state._dirty = true;
       });
       container.appendChild(item);
     });
@@ -197,16 +201,16 @@
     var t = TEMPLATES[name];
     if (!t) return;
     _state.files = {
-      'main.js': t.main,
-      'inject.js': t.inject,
-      'style.css': t.style,
+      'main.js': t.main || '',
+      'inject.js': t.inject || '',
+      'style.css': t.style || '',
       'config.json': '{\n  "key": "value"\n}',
       'manifest.json': t.manifest
     };
-    _state.meta.name = t.meta.name;
-    _state.meta.description = t.meta.description;
-    _state.meta.hooks = t.meta.hooks.slice();
-    _state.meta.permissions = t.meta.permissions.slice();
+    _state.meta.name = t.meta.name || '新插件';
+    _state.meta.description = t.meta.description || '';
+    _state.meta.hooks = t.meta.hooks ? t.meta.hooks.slice() : [];
+    _state.meta.permissions = t.meta.permissions ? t.meta.permissions.slice() : [];
     _state.meta.id = 'user.' + name.replace(/[^a-z0-9]/gi, '-').toLowerCase();
     syncMetaToUI();
     renderHookList();
@@ -217,48 +221,73 @@
   }
 
   function syncMetaToUI() {
-    document.getElementById('pluginMetaName').value = _state.meta.name;
-    document.getElementById('pluginMetaVersion').value = _state.meta.version;
-    document.getElementById('pluginMetaAuthor').value = _state.meta.author;
-    document.getElementById('pluginMetaCategory').value = _state.meta.category;
-    document.getElementById('pluginMetaDescription').value = _state.meta.description;
+    var nameEl = document.getElementById('pluginMetaName');
+    var verEl = document.getElementById('pluginMetaVersion');
+    var authorEl = document.getElementById('pluginMetaAuthor');
+    var catEl = document.getElementById('pluginMetaCategory');
+    var descEl = document.getElementById('pluginMetaDescription');
+    if (nameEl) nameEl.value = _state.meta.name;
+    if (verEl) verEl.value = _state.meta.version;
+    if (authorEl) authorEl.value = _state.meta.author;
+    if (catEl) catEl.value = _state.meta.category;
+    if (descEl) descEl.value = _state.meta.description;
   }
 
   function syncMetaFromUI() {
-    _state.meta.name = document.getElementById('pluginMetaName').value || '未命名插件';
-    _state.meta.version = document.getElementById('pluginMetaVersion').value || '1.0.0';
-    _state.meta.author = document.getElementById('pluginMetaAuthor').value || 'Anonymous';
-    _state.meta.category = document.getElementById('pluginMetaCategory').value || 'utility';
-    _state.meta.description = document.getElementById('pluginMetaDescription').value || '';
+    var nameEl = document.getElementById('pluginMetaName');
+    var verEl = document.getElementById('pluginMetaVersion');
+    var authorEl = document.getElementById('pluginMetaAuthor');
+    var catEl = document.getElementById('pluginMetaCategory');
+    var descEl = document.getElementById('pluginMetaDescription');
+    _state.meta.name = (nameEl && nameEl.value) || '未命名插件';
+    _state.meta.version = (verEl && verEl.value) || '1.0.0';
+    _state.meta.author = (authorEl && authorEl.value) || 'Anonymous';
+    _state.meta.category = (catEl && catEl.value) || 'utility';
+    _state.meta.description = (descEl && descEl.value) || '';
   }
 
   function newPlugin() {
     if (!confirm('新建插件将清空当前编辑器,是否继续?')) return;
     _state.files = {
       'main.js': '// 你的插件主逻辑\nexport default function(api) {\n  console.log("[MyPlugin] Loaded");\n  return {};\n}\n',
-      'inject.js': '// 注入到游戏页面的脚本(function(){\n  console.log("[MyPlugin] Injected");\n})();\n',
+      'inject.js': '// 注入到游戏页面的脚本\n(function(){\n  console.log("[MyPlugin] Injected");\n})();\n',
       'style.css': '/* 注入到游戏页面的 CSS */\n',
       'config.json': '{\n  "key": "value"\n}',
       'manifest.json': '{\n  "id": "user.my-plugin",\n  "name": "新插件",\n  "version": "1.0.0",\n  "author": "Anonymous",\n  "category": "utility",\n  "description": "",\n  "hooks": [],\n  "permissions": []\n}\n'
     };
-    _state.meta = { id: 'user.my-plugin', name: '新插件', version: '1.0.0', author: '', category: 'utility', description: '', hooks: [], permissions: [] };
+    _state.meta = { 
+      id: 'user.my-plugin', 
+      name: '新插件', 
+      version: '1.0.0', 
+      author: 'Anonymous', 
+      category: 'utility', 
+      description: '', 
+      hooks: [], 
+      permissions: [] 
+    };
     syncMetaToUI();
     renderHookList();
     renderPermissionList();
     switchFile('main.js');
     _state._dirty = false;
-    document.getElementById('pluginEditorTitle').textContent = '插件编写器 - 新建';
+    var titleEl = document.getElementById('pluginEditorTitle');
+    if (titleEl) titleEl.textContent = '插件编写器 - 新建';
     if (window.MCJS_TOAST) window.MCJS_TOAST('已创建空白插件', 'success');
   }
 
   function savePlugin() {
     saveCurrentFile();
     syncMetaFromUI();
-    if (!_state.meta.name) { if (window.MCJS_TOAST) window.MCJS_TOAST('请填写插件名称', 'error'); return; }
-    if (!_state.meta.hooks.length) { if (window.MCJS_TOAST) window.MCJS_TOAST('请至少选择一个 Hook 点', 'error'); return; }
+    if (!_state.meta.name) { 
+      if (window.MCJS_TOAST) window.MCJS_TOAST('请填写插件名称', 'error'); 
+      return; 
+    }
+    if (!_state.meta.hooks || !_state.meta.hooks.length) { 
+      if (window.MCJS_TOAST) window.MCJS_TOAST('请至少选择一个 Hook 点', 'error'); 
+      return; 
+    }
     _state._dirty = false;
 
-    // 构建插件 manifest
     var manifest = {
       id: _state.meta.id || ('user.' + _state.meta.name.toLowerCase().replace(/[^a-z0-9]/g, '-')),
       name: _state.meta.name,
@@ -276,18 +305,21 @@
         'style.css': _state.files['style.css'],
         'config.json': _state.files['config.json']
       },
-      // 运行时入口:对于简单插件,直接使用 inject.js 的代码
       code: _state.files['inject.js'] || _state.files['main.js'],
-      // 简单 builtin 函数:在 launch:html 时把 code 注入游戏
       builtin: generateBuiltinCode(),
       installedAt: Date.now()
     };
 
     try {
+      if (!window.MCJS_REGISTRY) {
+        if (window.MCJS_TOAST) window.MCJS_TOAST('插件系统未就绪,请刷新页面', 'error');
+        return;
+      }
       window.MCJS_REGISTRY.install(manifest);
       window.MCJS_REGISTRY.enable(manifest.id);
       if (window.MCJS_TOAST) window.MCJS_TOAST('插件已保存并启用: ' + manifest.name, 'success');
-      document.getElementById('pluginEditorTitle').textContent = '插件编写器 - ' + manifest.name;
+      var titleEl = document.getElementById('pluginEditorTitle');
+      if (titleEl) titleEl.textContent = '插件编写器 - ' + manifest.name;
       if (window.MCJS_PLUGIN_MARKET) window.MCJS_PLUGIN_MARKET.refresh();
     } catch (e) {
       if (window.MCJS_TOAST) window.MCJS_TOAST('保存失败: ' + e.message, 'error');
@@ -295,7 +327,6 @@
   }
 
   function generateBuiltinCode() {
-    // 返回一个简单 builtin,会在 launch:html 钩子中把 code 注入游戏
     return function() {
       return {
         inject: function() {
@@ -312,8 +343,9 @@
     saveCurrentFile();
     var editor = document.getElementById('pluginCodeEditor');
     var output = document.getElementById('pluginTestOutput');
-    var code = editor.value;
+    var code = editor ? editor.value : '';
 
+    if (!output) return;
     output.textContent = '';
     function log(msg, type) {
       var line = document.createElement('div');
@@ -334,7 +366,6 @@
     }
 
     if (_state.currentFile === 'style.css') {
-      // 简单 CSS 验证:匹配花括号
       var opens = (code.match(/{/g) || []).length;
       var closes = (code.match(/}/g) || []).length;
       if (opens === closes) {
@@ -345,11 +376,9 @@
       return;
     }
 
-    // JS 语法检查(使用 Function 构造器)
     try {
       new Function(code);
       log('JavaScript 语法正确 ✓', 'info');
-      // 检查常见 API
       if (code.indexOf('MCJS_PLUGIN_API') !== -1) {
         log('检测到 MCJS_PLUGIN_API 调用 - 插件将使用插件 API', 'info');
       }
@@ -364,6 +393,7 @@
 
   function formatCode() {
     var editor = document.getElementById('pluginCodeEditor');
+    if (!editor) return;
     var code = editor.value;
     if (_state.currentFile === 'manifest.json' || _state.currentFile === 'config.json') {
       try {
@@ -376,7 +406,6 @@
       }
       return;
     }
-    // 简单 JS 格式化(基于缩进)
     var lines = code.split('\n');
     var out = [];
     var indent = 0;
@@ -437,6 +466,7 @@
     _state._dirty = false;
     setTimeout(applyHighlight, 0);
   }
+
   function close(force) {
     var modal = document.getElementById('pluginEditorModal');
     if (!modal) return;
@@ -452,10 +482,9 @@
     var modal = document.getElementById('pluginEditorModal');
     if (!modal) return;
 
-    document.getElementById('pluginEditorClose').addEventListener('click', function(){ close(); });
-    // 不再监听 modal 自身 click 关闭(避免点击空白退出)
+    var closeBtn = document.getElementById('pluginEditorClose');
+    if (closeBtn) closeBtn.addEventListener('click', function(){ close(); });
 
-    // 委托音效
     modal.addEventListener('click', function(e){
       try { if (window.MCJS && window.MCJS.sound) window.MCJS.sound.click(); } catch(_){}
     });
@@ -484,7 +513,6 @@
         _state._dirty = true;
         applyHighlight();
       });
-      // Tab 键支持
       editor.addEventListener('keydown', function(e) {
         if (e.key === 'Tab') {
           e.preventDefault();
@@ -497,24 +525,31 @@
           applyHighlight();
         }
       });
-      // 同步滚动高亮
       editor.addEventListener('scroll', function(){
         var hl = document.getElementById('pluginCodeHighlight');
         if (hl) { hl.scrollTop = editor.scrollTop; hl.scrollLeft = editor.scrollLeft; }
       });
     }
 
-    document.getElementById('newPluginBtn').addEventListener('click', newPlugin);
-    document.getElementById('savePluginBtn').addEventListener('click', savePlugin);
-    document.getElementById('testPluginBtn').addEventListener('click', testPlugin);
-    document.getElementById('formatPluginBtn').addEventListener('click', formatCode);
-    document.getElementById('exportPluginBtn').addEventListener('click', exportPlugin);
-    document.getElementById('applyTemplateBtn').addEventListener('click', function() {
-      var sel = document.getElementById('pluginTemplate');
-      if (sel.value) applyTemplate(sel.value);
-    });
+    var newBtn = document.getElementById('newPluginBtn');
+    var saveBtn = document.getElementById('savePluginBtn');
+    var testBtn = document.getElementById('testPluginBtn');
+    var formatBtn = document.getElementById('formatPluginBtn');
+    var exportBtn = document.getElementById('exportPluginBtn');
+    var applyBtn = document.getElementById('applyTemplateBtn');
 
-    // ESC 关闭(也走 dirty 检查)
+    if (newBtn) newBtn.addEventListener('click', newPlugin);
+    if (saveBtn) saveBtn.addEventListener('click', savePlugin);
+    if (testBtn) testBtn.addEventListener('click', testPlugin);
+    if (formatBtn) formatBtn.addEventListener('click', formatCode);
+    if (exportBtn) exportBtn.addEventListener('click', exportPlugin);
+    if (applyBtn) {
+      applyBtn.addEventListener('click', function() {
+        var sel = document.getElementById('pluginTemplate');
+        if (sel && sel.value) applyTemplate(sel.value);
+      });
+    }
+
     document.addEventListener('keydown', function(e){
       if (e.key === 'Escape' && modal.classList.contains('active')) {
         e.preventDefault();
@@ -523,7 +558,7 @@
     });
   }
 
-  /* ===== 代码高亮 (极简) ===== */
+  /* ===== 代码高亮 ===== */
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, '&amp;')
@@ -532,11 +567,17 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
-  function highlight(code, lang) {
-    // 极简语法高亮:不引外部库,基于正则
-    // 1. 转义
+
+  function applyHighlight() {
+    var editor = document.getElementById('pluginCodeEditor');
+    var hl = document.getElementById('pluginCodeHighlight');
+    if (!editor || !hl) return;
+    var code = editor.value || '';
+    var lang = _state.currentFile.endsWith('.css') ? 'css'
+             : (_state.currentFile.endsWith('.json') || _state.currentFile === 'manifest.json' || _state.currentFile === 'config.json') ? 'json'
+             : 'js';
+    
     var html = escapeHtml(code);
-    // 2. 注释
     if (lang === 'css') {
       html = html.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-c">$1</span>');
     } else if (lang === 'json') {
@@ -544,18 +585,32 @@
       html = html.replace(/:\s*("(?:\\.|[^"\\])*")/g, ': <span class="hl-s">$1</span>');
       html = html.replace(/\b(true|false|null)\b/g, '<span class="hl-b">$1</span>');
     } else {
-      // js
       html = html.replace(/(\/\/[^\n]*)/g, '<span class="hl-c">$1</span>');
       html = html.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-c">$1</span>');
       html = html.replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/g, '<span class="hl-s">$1</span>');
       html = html.replace(/\b(const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|delete|typeof|instanceof|in|of|class|extends|super|this|null|undefined|true|false|try|catch|finally|throw|async|await|yield|import|export|from|as|default|void)\b/g, '<span class="hl-k">$1</span>');
       html = html.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="hl-n">$1</span>');
     }
-    return html;
+    hl.innerHTML = html;
   }
-  function applyHighlight() {
-    var editor = document.getElementById('pluginCodeEditor');
-    var hl = document.getElementById('pluginCodeHighlight');
-    if (!editor || !hl) return;
-    var lang = _state.currentFile.endsWith('.css') ? 'css'
-             : _state.currentFile.endsWith(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+
+  /* ===== Public API ===== */
+  window.MCJS_PLUGIN_EDITOR = {
+    open: open,
+    close: close,
+    new: newPlugin,
+    save: savePlugin,
+    test: testPlugin,
+    format: formatCode,
+    export: exportPlugin,
+    applyTemplate: applyTemplate
+  };
+
+  /* ===== Init ===== */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindEvents);
+  } else {
+    setTimeout(bindEvents, 0);
+  }
+
+})();
