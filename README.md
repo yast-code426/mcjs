@@ -82,7 +82,7 @@ mcjs-mirror/
 | Eaglercraft 1.12.2 WASM u2 | WASM | 15.9MB | CN/EN | Beta |
 | Eaglercraft 1.12.2 WASM u3 | WASM | 17.9MB | EN | Beta |
 | Eaglercraft 1.16.5 WASM | WASM | 50.6MB | EN | New Beta |
-| Eaglercraft 1.21.11 WASM | WASM | 49.5MB | EN | New Beta |
+| Eaglercraft 1.21.11 WASM | WASM | 46.7MB | CN/EN | New Beta |
 | Eaglercraft 26.1.2 | WASM | 61.6MB | EN | New Beta |
 | Eaglercraft 1.6.4 | JS | 23.5MB | EN | Legacy |
 | Eaglercraft 1.5.2 | JS | 20.2MB | EN | Legacy |

@@ -70,10 +70,8 @@ var settings = ensureSettingsDefaults(window.MCJS_SETTINGS || {});
 if (typeof settings.soundVolume === 'number' && settings.soundVolume > 0 && settings.soundVolume <= 1) {
   settings.soundVolume = Math.round(settings.soundVolume * 100);
 }
-// 如果 window.MCJS_SETTINGS 存在但不完整，更新它
-if (window.MCJS_SETTINGS) {
-  window.MCJS_SETTINGS = settings;
-}
+// 确保 window.MCJS_SETTINGS 始终可用（供 game.js / 插件读取）
+window.MCJS_SETTINGS = settings;
 
 var searchQuery = '';
 var searchDebounceTimer = null;
@@ -390,6 +388,11 @@ function renderCard(ver){
   var extra = ver.recommendTag ? (' <span class="card-recommend-tag">' + escapeHtml2(ver.recommendTag) + '</span>') : '';
   var detailHtml = renderHighlightedDetail(ver.detail);
 
+  // v1.5.1: 部分高版本测试版存在「无皮肤无法进入主页」的 bug，提供官方默认皮肤下载按钮（与 MCJS 官网同步）
+  var skinBtn = ver.tempSkin
+    ? ('<a class="card-skin-btn" href="' + escapeHtml2(ver.tempSkin) + '" download="steve.png" title="下载官方默认皮肤 steve.png，进入游戏后在皮肤设置中导入即可">下载临时皮肤</a>')
+    : '';
+
   return '<div class="version-card" role="article" aria-label="' + escapeHtml2(ver.name) + ' 版本卡片" data-type="' + ver.type + '" data-id="' + ver.id + '" data-engine="' + ver.engine + '">' +
     '<div class="card-badges">' +
       '<span class="card-badge ' + badge.cls + '">' + badge.text + '</span>' + extra +
@@ -400,7 +403,10 @@ function renderCard(ver){
     '<div class="card-detail">' + detailHtml + '</div>' +
     '<div class="card-footer">' +
       '<span class="card-size">' + ver.size + '</span>' +
-      '<button class="card-launch-btn" data-id="' + ver.id + '" aria-label="启动 ' + escapeHtml2(ver.name) + '">开始游戏</button>' +
+      '<div class="card-actions">' +
+        skinBtn +
+        '<button class="card-launch-btn" data-id="' + ver.id + '" aria-label="启动 ' + escapeHtml2(ver.name) + '">开始游戏</button>' +
+      '</div>' +
     '</div>' +
   '</div>';
 }
@@ -1105,7 +1111,6 @@ function buildGeneralPane() {
     stSeg('setEngine', 'enginePrefer', '默认引擎', 'WASM 性能更高，JS 兼容性更好；仅影响同时提供两种引擎的版本', [
       { v: 'auto', t: '自动' }, { v: 'wasm', t: 'WASM' }, { v: 'js', t: 'JS' }
     ]) +
-    stToggle('setFullscreen', 'fullscreenLaunch', '全屏启动', '启动游戏后自动进入全屏') +
     stToggle('setQuickLaunch', 'quickLaunch', '快速启动', '跳过镜像选择，直接启动') +
     stToggle('setPopup', 'popupLaunch', '弹窗启动', '在新窗口中启动游戏') +
     stToggle('setLoadingDetail', 'loadingDetail', '加载详情', '显示详细的加载步骤信息') +
@@ -1259,7 +1264,7 @@ function buildAboutPane() {
     stAction('copyBrowserInfoBtn', '复制环境信息')
   ) + stGroup('关于 MCJS Launcher',
     '<div class="settings-info-card">' +
-      '<div class="info-row"><span>启动器版本</span><strong>v1.5.0</strong></div>' +
+      '<div class="info-row"><span>启动器版本</span><strong>v1.5.1</strong></div>' +
       '<div class="info-row"><span>项目性质</span><strong>社区启动器</strong></div>' +
       '<div class="info-row"><span>游戏内核</span><strong>Eaglercraft</strong></div>' +
     '</div>' +
@@ -2164,7 +2169,7 @@ function getLatestAnnouncement() {
   if (window.MCJS_GET_LATEST_ANNOUNCEMENT) {
     try { return window.MCJS_GET_LATEST_ANNOUNCEMENT(); } catch (e) {}
   }
-  return { version: 'v1.5.0', date: '', title: '更新公告', items: [] };
+  return { version: 'v1.5.1', date: '', title: '更新公告', items: [] };
 }
 
 function getAllAnnouncements() {

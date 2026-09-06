@@ -213,17 +213,18 @@ var VERSIONS = [
     translator: 'Enchantment-Niko',
     type: 'new-beta',
     engine: 'WASM',
-    size: '49.5MB',
+    size: '46.7MB',
     lang: ['简体中文', 'English'],
     features: ['单机'],
     multiplayer: false,
     modpack: false,
-    description: '棘巧试炼更新。极度早期版本，可能导致浏览器崩溃。需要导入自定义皮肤才能进入主页。',
-    detail: '⚠️已知 bug: 需要导入一个自定义皮肤才能进入主页\n' +
+    tempSkin: 'assets/steve.png',
+    description: '棘巧试炼更新。极度早期版本，可能导致浏览器崩溃。需导入自定义皮肤才能进入主页，可点击「下载临时皮肤」获取官方默认皮肤。',
+    detail: '⚠️已知 bug: 需要导入一个自定义皮肤才能进入主页，或点卡片上的「下载临时皮肤」按钮获取官方默认皮肤(steve.png)\n' +
             '语言：简体中文、英文\n' +
             '性能：极低(建议使用高性能的电脑)\n' +
             '设备：仅支持电脑键鼠操作\n' +
-            '联机：单机 ✓ 局域网 ✓ 远程联机 ✗\n' +
+            '联机：仅单机游戏\n' +
             '资源：自定义材质包',
     path: '1.21.11',
     mirrors: makeBetaMirrors('1.21.11', 'https://enchantment-niko.github.io/webmc/1.21.11/desktop.html'),

@@ -558,23 +558,4 @@
     var hl = document.getElementById('pluginCodeHighlight');
     if (!editor || !hl) return;
     var lang = _state.currentFile.endsWith('.css') ? 'css'
-             : _state.currentFile.endsWith('.json') ? 'json' : 'js';
-    hl.className = 'plugin-code-highlight lang-' + lang;
-    hl.innerHTML = highlight(editor.value, lang) + '\n';
-  }
-
-  window.MCJS_PLUGIN_EDITOR = {
-    open: open,
-    close: close,
-    newPlugin: newPlugin,
-    savePlugin: savePlugin,
-    testPlugin: testPlugin,
-    exportPlugin: exportPlugin
-  };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindEvents);
-  } else {
-    setTimeout(bindEvents, 0);
-  }
-})();
+             : _state.currentFile.endsWith(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        

@@ -4,8 +4,8 @@
  * - 缓存条目上限自动清理(FIFO)
  * 纯 ES5 写法,不使用 async/await 与箭头函数。
  */
-var CACHE_VERSION = 'mcjs-sw-v3-r1';
-var STATIC_CACHE = 'mcjs-static-v3';
+var CACHE_VERSION = 'mcjs-sw-v3-r2';
+var STATIC_CACHE = 'mcjs-static-v3-r2';
 var GAME_CACHE_PREFIX = 'mcjs-game-';
 var DEFAULT_CACHE_LIMIT = 600; // 默认缓存条目数量限制
 var FETCH_TIMEOUT = 12000;    // 网络回源超时(ms)
@@ -45,7 +45,8 @@ var STATIC_ASSETS = [
   './js/plugin-editor.js',
   './js/app.js',
   './assets/favicon.svg',
-  './assets/bg.jpg'
+  './assets/bg.jpg',
+  './assets/steve.png'
 ];
 
 function asPromise(v) { return Promise.resolve(v); }

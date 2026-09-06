@@ -1176,14 +1176,14 @@ var currentBlobURL=null;
 var lastLaunchedVersion=null;
 
 function launchGame(version,onProgress,onReady,onError,autoMode){
-  var settings=window.MCJS_SETTINGS;
-  var verbose=settings&&settings.verboseLog;
+  try {
+  var settings=window.MCJS_SETTINGS || {};
+  var verbose=!!(settings&&settings.verboseLog);
   if(verbose) console.log('[MCJS] launchGame start:', version.id, 'autoMode=' + autoMode, 'cacheDisabled=' + !!settings.disableCache);
-  var mirrorIdx = settings.mirrorIdx;
-  if(mirrorIdx < 0 || mirrorIdx >= version.mirrors.length) {
+  var mirrorIdx = settings.mirrorIndex;
+  if(mirrorIdx == null || isNaN(mirrorIdx) || mirrorIdx < 0 || mirrorIdx >= version.mirrors.length) {
     mirrorIdx = 0;
-    settings.mirrorIndex = 0;
-    try{ window.MCJS_SAVE_SETTINGS(settings); }catch(e){}
+    try{ settings.mirrorIndex = 0; window.MCJS_SAVE_SETTINGS && window.MCJS_SAVE_SETTINGS(settings); }catch(e){}
   }
   var rawMirror=version.mirrors[mirrorIdx];
   var mirrorURL=buildMirrorURL(rawMirror,version);
@@ -1318,6 +1318,10 @@ function launchGame(version,onProgress,onReady,onError,autoMode){
       });
     });
   });
+  } catch(e) {
+    console.error('[MCJS] launchGame fatal error:', e);
+    if(onError) try { onError('启动出错: ' + (e.message || e)); } catch(_) {}
+  }
 }
 
 /* 收集由插件生成的待注入项(JS / CSS)

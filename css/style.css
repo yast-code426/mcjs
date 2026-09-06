@@ -517,6 +517,32 @@ body.density-spacious { --card-gap:20px; --card-padding:24px 26px 18px; }
 }
 .card-launch-btn:hover { background: var(--accent-green-strong); transform: translateY(-1px); }
 
+/* v1.5.1: 临时皮肤下载按钮（与 MCJS 官网同步） */
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-skin-btn {
+  display: inline-block;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--accent-green);
+  border: 1px solid var(--accent-green);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.card-skin-btn:hover {
+  background: var(--accent-green);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
 .empty-state {
   text-align: center;
   padding: 60px 20px;

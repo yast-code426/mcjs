@@ -8,6 +8,15 @@
 
   var ANNOUNCEMENTS = [
     {
+      version: 'v1.5.1',
+      date: '2026-09-06',
+      title: 'MCJS Launcher v1.5.1 1.21.11 简介同步与临时皮肤',
+      items: [
+        { tag: '新增', text: '<strong>下载临时皮肤按钮</strong>：Eaglercraft 1.21.11 WASM 存在「无自定义皮肤无法进入主页」的已知 bug，版本卡片新增「下载临时皮肤」按钮，可一键下载官方默认皮肤 steve.png，进入游戏后在皮肤设置中导入即可（与 MCJS 官网同步）' },
+        { tag: '同步', text: '<strong>1.21.11 简介更新</strong>：与 MCJS 官网最新数据同步，大小更新为 46.7MB，联机说明修正为「仅单机游戏」，bug 提示补充临时皮肤解决方案' }
+      ]
+    },
+    {
       version: 'v1.5.0',
       date: '2026-09-05',
       title: 'MCJS Launcher v1.5.0 设置与界面焕新',
